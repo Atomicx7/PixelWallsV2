@@ -51,6 +51,8 @@ const Hero: React.FC = () => {
     );
 };
 
+// Use the Vercel production URL for the backend
+const API_BASE_URL = 'https://pixel-walls-v2.vercel.app';
 
 export function Gallery({ onLogout }: GalleryProps) {
   const [wallpapers, setWallpapers] = useState<Wallpaper[]>([]);
@@ -60,22 +62,21 @@ export function Gallery({ onLogout }: GalleryProps) {
   const [selectedWallpaper, setSelectedWallpaper] = useState<Wallpaper | null>(null);
   const [isUploadModalOpen, setUploadModalOpen] = useState(false);
 
-  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-
   useEffect(() => {
     const fetchWallpapers = async () => {
       setLoading(true);
       setError(null);
       try {
-        const response = await fetch(`${apiUrl}/api/wallpapers`);
+        const response = await fetch(`${API_BASE_URL}/api/wallpapers`);
         if (!response.ok) {
-          throw new Error(`Failed to fetch from the backend: ${response.statusText}`);
+          throw new Error('Failed to fetch from the backend.');
         }
         const data: Wallpaper[] = await response.json();
         setWallpapers(data);
       } catch (err) {
         console.error("Failed to fetch wallpapers:", err);
-        setError("Could not connect to the backend server. Please try again later.");
+        setError("Could not connect to the backend server. Is it running? Displaying sample wallpapers as a fallback.");
+        setWallpapers(WALLPAPERS); // Fallback to local data
       } finally {
         setLoading(false);
       }
@@ -105,6 +106,7 @@ export function Gallery({ onLogout }: GalleryProps) {
 
   const handleImageUpload = async (data: UploadData) => {
     const { file, title, author, category } = data;
+
     const formData = new FormData();
     formData.append('image', file);
     formData.append('alt', title);
@@ -112,21 +114,34 @@ export function Gallery({ onLogout }: GalleryProps) {
     formData.append('category', category);
 
     try {
-      const response = await fetch(`${apiUrl}/api/upload`, {
+      const response = await fetch(`${API_BASE_URL}/api/upload`, {
         method: 'POST',
         body: formData,
       });
       
       if (!response.ok) {
-        throw new Error(`Upload failed: ${response.statusText}`);
+        let errorMessage = `Server responded with status: ${response.status}`;
+        try {
+          // Try to parse a structured error message from the backend
+          const errorBody = await response.json();
+          errorMessage = errorBody.details || errorBody.error || JSON.stringify(errorBody);
+        } catch (e) {
+          // Fallback to plain text if the response isn't JSON
+          const errorText = await response.text();
+          if (errorText) {
+            errorMessage = errorText;
+          }
+        }
+        throw new Error(errorMessage);
       }
       
       const newWallpaper = await response.json();
       setWallpapers(prev => [newWallpaper, ...prev]);
-      handleCloseUploadModal();
+      handleCloseUploadModal(); // Close modal only on success
     } catch (error) {
       console.error("Upload failed:", error);
-      alert("Upload failed. See console for details.");
+      // Re-throw the refined error to be caught and displayed by the UploadModal
+      throw error;
     }
   };
 

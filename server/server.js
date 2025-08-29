@@ -1,4 +1,4 @@
-// server.js (Updated for OAuth 2.0 with Personal Accounts)
+// server.js (Updated for Vercel Deployment)
 require('dotenv').config();
 const express = require('express');
 const { google } = require('googleapis');
@@ -9,69 +9,66 @@ const fs = require('fs').promises;
 const path = require('path');
 
 const app = express();
-const port = process.env.PORT || 3001;
 
 // --- Configuration ---
 const FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID;
-const CREDENTIALS_PATH = path.join(__dirname, 'oauth-credentials.json');
-const TOKEN_PATH = path.join(__dirname, 'token.json');
 
-// Middleware
+// --- CORS Configuration ---
+// Allow requests from our production frontend and local development environment
+const allowedOrigins = ['https://pixelwalls.vercel.app', 'http://localhost:5173'];
 app.use(cors({
-  origin: [
-    'https://pixelwalls.vercel.app',
-    'http://localhost:5173' // Keep local development URL
-  ],
-  methods: ['GET', 'POST'],
-  credentials: true
+  origin: function (origin, callback) {
+    // allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) === -1) {
+      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+      return callback(new Error(msg), false);
+    }
+    return callback(null, true);
+  }
 }));
+
+
 app.use(express.json());
 
 // --- Google Drive Authentication ---
-let drive;
-
 async function authorizeAndSetupDrive() {
   try {
-    const credentials = JSON.parse(await fs.readFile(CREDENTIALS_PATH));
+    // In production (Vercel), read credentials from environment variables
+    const credentialsStr = process.env.GOOGLE_CREDENTIALS_JSON;
+    const tokenStr = process.env.GOOGLE_TOKEN_JSON;
+
+    if (!credentialsStr || !tokenStr) {
+      throw new Error("Missing Google credentials in environment variables.");
+    }
+
+    const credentials = JSON.parse(credentialsStr);
+    const token = JSON.parse(tokenStr);
+
     const { client_secret, client_id, redirect_uris } = credentials.web;
     const oAuth2Client = new google.auth.OAuth2(client_id, client_secret, redirect_uris[0]);
-
-    const token = JSON.parse(await fs.readFile(TOKEN_PATH));
     oAuth2Client.setCredentials(token);
-    
-    // Auto-refresh the token if it's expired
-    oAuth2Client.on('tokens', (newTokens) => {
-        if (newTokens.refresh_token) {
-            // A new refresh token might be issued, save it.
-            token.refresh_token = newTokens.refresh_token;
-        }
-        token.access_token = newTokens.access_token;
-        token.expiry_date = newTokens.expiry_date;
-        fs.writeFile(TOKEN_PATH, JSON.stringify(token));
-        console.log('Token refreshed and saved.');
-    });
 
-    drive = google.drive({ version: 'v3', auth: oAuth2Client });
-    console.log('Google Drive client is authorized and ready.');
-    return true;
+    // This is a simple server, so we don't need to handle token refresh saving for now.
+    // Vercel's environment variables will be used on each cold start.
+
+    return google.drive({ version: 'v3', auth: oAuth2Client });
   } catch (error) {
     console.error('CRITICAL: Failed to authorize Google Drive client.');
-    console.error('Have you run `node generate-token.js` successfully?');
     console.error(error.message);
-    return false;
+    return null; // Return null on failure
   }
 }
-
 
 // Set up Multer
 const upload = multer({ storage: multer.memoryStorage() });
 const VALID_CATEGORIES = ['Abstract', 'Pastel', 'Minimalist', 'Interiors'];
 
-// --- API Routes ---
+// --- API Router and Initialization Middleware ---
+const apiRouter = express.Router();
 
-app.post('/api/upload', upload.single('image'), async (req, res) => {
-  if (!drive) return res.status(503).json({ error: 'Drive service is not available.' });
-  
+apiRouter.post('/upload', upload.single('image'), async (req, res) => {
+  const drive = req.app.locals.drive;
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded.' });
 
@@ -118,9 +115,8 @@ app.post('/api/upload', upload.single('image'), async (req, res) => {
   }
 });
 
-app.get('/api/wallpapers', async (req, res) => {
-    if (!drive) return res.status(503).json({ error: 'Drive service is not available.' });
-
+apiRouter.get('/wallpapers', async (req, res) => {
+    const drive = req.app.locals.drive;
     try {
         const response = await drive.files.list({
             q: `'${FOLDER_ID}' in parents and trashed=false`,
@@ -146,32 +142,24 @@ app.get('/api/wallpapers', async (req, res) => {
     }
 });
 
-// Add health check endpoint
-app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    driveStatus: !!drive,
-    timestamp: new Date().toISOString()
-  });
-});
-
-// --- Start Server ---
-async function startServer() {
-  const isAuthorized = await authorizeAndSetupDrive();
-  if (isAuthorized) {
-    // Remove explicit port listening for Vercel
-    if (process.env.NODE_ENV !== 'production') {
-      app.listen(process.env.PORT || 3001, () => {
-        console.log(`Server running on port ${process.env.PORT || 3001}`);
-      });
+// Middleware to initialize the Google Drive client on the first request (cold start)
+const initializeDriveClient = async (req, res, next) => {
+    if (app.locals.drive) {
+        return next();
     }
-  } else {
-    console.error('Could not start server due to authorization failure.');
-    process.exit(1);
-  }
-}
+    console.log("Initializing Google Drive client for the first time...");
+    const driveClient = await authorizeAndSetupDrive();
+    if (driveClient) {
+        app.locals.drive = driveClient;
+        console.log("Initialization successful.");
+        next();
+    } else {
+        res.status(503).json({ error: 'Failed to initialize backend service. Check server logs.' });
+    }
+};
 
-startServer();
+// Use the initializer middleware for all API routes
+app.use('/api', initializeDriveClient, apiRouter);
 
-// Export the Express API
+// Export the app for Vercel's serverless environment
 module.exports = app;
