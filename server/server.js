@@ -146,16 +146,25 @@ app.get('/api/wallpapers', async (req, res) => {
     }
 });
 
+// Add health check endpoint
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    driveStatus: !!drive,
+    timestamp: new Date().toISOString()
+  });
+});
+
 // --- Start Server ---
 async function startServer() {
   const isAuthorized = await authorizeAndSetupDrive();
   if (isAuthorized) {
-    app.listen(port, () => {
-      console.log(`Server is running on http://localhost:${port}`);
-      if (!FOLDER_ID) {
-        console.warn('CRITICAL: GOOGLE_DRIVE_FOLDER_ID is missing from .env file.');
-      }
-    });
+    // Remove explicit port listening for Vercel
+    if (process.env.NODE_ENV !== 'production') {
+      app.listen(process.env.PORT || 3001, () => {
+        console.log(`Server running on port ${process.env.PORT || 3001}`);
+      });
+    }
   } else {
     console.error('Could not start server due to authorization failure.');
     process.exit(1);
@@ -163,3 +172,6 @@ async function startServer() {
 }
 
 startServer();
+
+// Export the Express API
+module.exports = app;
