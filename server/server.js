@@ -17,7 +17,14 @@ const CREDENTIALS_PATH = path.join(__dirname, 'oauth-credentials.json');
 const TOKEN_PATH = path.join(__dirname, 'token.json');
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: [
+    'https://pixelwalls.vercel.app',
+    'http://localhost:5173' // Keep local development URL
+  ],
+  methods: ['GET', 'POST'],
+  credentials: true
+}));
 app.use(express.json());
 
 // --- Google Drive Authentication ---
