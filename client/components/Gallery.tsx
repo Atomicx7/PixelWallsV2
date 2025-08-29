@@ -1,16 +1,22 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Header } from './Header';
 import { CategoryFilter } from './CategoryFilter';
 import { ImageGrid } from './ImageGrid';
 import { ImageModal } from './ImageModal';
 import { UploadModal } from './UploadModal';
 import { BottomNav } from './BottomNav';
-import { WALLPAPERS, CATEGORIES } from '../constants';
+import { CATEGORIES } from '../constants';
 import { Wallpaper, Category } from '../types';
 import { DynamicBackground } from './DynamicBackground';
 
 interface GalleryProps {
+  wallpapers: Wallpaper[];
+  loading: boolean;
+  error: string | null;
   onLogout: () => void;
+  onProfileClick: () => void;
+  onHomeClick: () => void;
+  onUpload: (data: UploadData) => Promise<void>;
 }
 
 interface UploadData {
@@ -51,40 +57,10 @@ const Hero: React.FC = () => {
     );
 };
 
-// Use the Vercel production URL for the backend
-const API_BASE_URL = 'https://pixel-walls-v2.vercel.app';
-
-export function Gallery({ onLogout }: GalleryProps) {
-  const [wallpapers, setWallpapers] = useState<Wallpaper[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
+export function Gallery({ wallpapers, loading, error, onLogout, onProfileClick, onHomeClick, onUpload }: GalleryProps) {
   const [activeCategory, setActiveCategory] = useState<Category>('All');
   const [selectedWallpaper, setSelectedWallpaper] = useState<Wallpaper | null>(null);
   const [isUploadModalOpen, setUploadModalOpen] = useState(false);
-
-  useEffect(() => {
-    const fetchWallpapers = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const response = await fetch(`${API_BASE_URL}/api/wallpapers`);
-        if (!response.ok) {
-          throw new Error('Failed to fetch from the backend.');
-        }
-        const data: Wallpaper[] = await response.json();
-        setWallpapers(data);
-      } catch (err) {
-        console.error("Failed to fetch wallpapers:", err);
-        setError("Could not connect to the backend server. Is it running? Displaying sample wallpapers as a fallback.");
-        setWallpapers(WALLPAPERS); // Fallback to local data
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchWallpapers();
-  }, []);
-
 
   const filteredWallpapers = useMemo(() => {
     if (activeCategory === 'All') {
@@ -105,49 +81,18 @@ export function Gallery({ onLogout }: GalleryProps) {
   const handleCloseUploadModal = () => setUploadModalOpen(false);
 
   const handleImageUpload = async (data: UploadData) => {
-    const { file, title, author, category } = data;
-
-    const formData = new FormData();
-    formData.append('image', file);
-    formData.append('alt', title);
-    formData.append('author', author);
-    formData.append('category', category);
-
     try {
-      const response = await fetch(`${API_BASE_URL}/api/upload`, {
-        method: 'POST',
-        body: formData,
-      });
-      
-      if (!response.ok) {
-        let errorMessage = `Server responded with status: ${response.status}`;
-        try {
-          // Try to parse a structured error message from the backend
-          const errorBody = await response.json();
-          errorMessage = errorBody.details || errorBody.error || JSON.stringify(errorBody);
-        } catch (e) {
-          // Fallback to plain text if the response isn't JSON
-          const errorText = await response.text();
-          if (errorText) {
-            errorMessage = errorText;
-          }
-        }
-        throw new Error(errorMessage);
-      }
-      
-      const newWallpaper = await response.json();
-      setWallpapers(prev => [newWallpaper, ...prev]);
-      handleCloseUploadModal(); // Close modal only on success
-    } catch (error) {
-      console.error("Upload failed:", error);
-      // Re-throw the refined error to be caught and displayed by the UploadModal
-      throw error;
+        await onUpload(data);
+        handleCloseUploadModal(); // Close modal only on success
+    } catch (err) {
+        // Re-throw to be caught by the modal
+        throw err;
     }
   };
 
   return (
     <>
-      <Header />
+      <Header onProfileClick={onProfileClick} />
       <main>
         <Hero />
         <div id="gallery-content" className="container mx-auto px-4 py-12 md:py-16 pb-28">
@@ -188,7 +133,7 @@ export function Gallery({ onLogout }: GalleryProps) {
             categories={CATEGORIES.filter(c => c !== 'All')}
         />
       )}
-      <BottomNav onUploadClick={handleOpenUploadModal} onLogout={onLogout} />
+      <BottomNav onUploadClick={handleOpenUploadModal} onLogout={onLogout} onHomeClick={onHomeClick} />
     </>
   );
 }

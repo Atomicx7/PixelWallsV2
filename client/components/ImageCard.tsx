@@ -16,13 +16,15 @@ const ExpandIcon: React.FC = () => (
 export const ImageCard: React.FC<ImageCardProps> = ({ wallpaper, onSelect }) => {
   return (
     <div
-      className="relative break-inside-avoid rounded-xl overflow-hidden group cursor-pointer"
+      className="relative break-inside-avoid rounded-xl overflow-hidden group cursor-pointer mb-6 transition-transform duration-300 ease-in-out hover:scale-105 hover:z-10"
       onClick={onSelect}
     >
       <img
         src={wallpaper.url}
         alt={wallpaper.alt}
-        className="w-full h-auto object-cover transition-transform duration-300 group-hover:scale-105"
+        className="w-full h-auto block"
+        width={wallpaper.width}
+        height={wallpaper.height}
         loading="lazy"
       />
       <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>

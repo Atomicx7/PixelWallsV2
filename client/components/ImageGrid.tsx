@@ -18,7 +18,7 @@ export const ImageGrid: React.FC<ImageGridProps> = ({ wallpapers, onSelectWallpa
 
   return (
     <div 
-      className="columns-2 md:columns-3 lg:columns-4 xl:columns-5 gap-6 space-y-6 p-1"
+      className="columns-2 md:columns-3 lg:columns-4 xl:columns-5 gap-6 p-1"
       style={{ perspective: '1000px' }}
     >
         {wallpapers.map((wallpaper) => (

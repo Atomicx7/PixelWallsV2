@@ -31,15 +31,19 @@ const ThemeToggle: React.FC = () => {
     );
 };
 
-const UserAvatar: React.FC = () => (
-    <div className="w-10 h-10 bg-gray-200/50 dark:bg-slate-700/50 rounded-full flex items-center justify-center ring-1 ring-gray-300/50 dark:ring-slate-600/50">
+const UserAvatar: React.FC<{ onProfileClick: () => void }> = ({ onProfileClick }) => (
+    <button onClick={onProfileClick} className="w-10 h-10 bg-gray-200/50 dark:bg-slate-700/50 rounded-full flex items-center justify-center ring-1 ring-gray-300/50 dark:ring-slate-600/50 hover:ring-blue-500 dark:hover:ring-blue-500 transition-all duration-300 focus:outline-none" aria-label="View Profile">
         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-500 dark:text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
         </svg>
-    </div>
+    </button>
 );
 
-export const Header: React.FC = () => {
+interface HeaderProps {
+    onProfileClick: () => void;
+}
+
+export const Header: React.FC<HeaderProps> = ({ onProfileClick }) => {
     const { theme } = useTheme();
     const [visible, setVisible] = useState(true);
     const [lastScrollY, setLastScrollY] = useState(0);
@@ -70,7 +74,6 @@ export const Header: React.FC = () => {
   }`}
 >
   <div className="relative h-[64px] container mx-auto">
-    {/* GlassSurface as background, behind everything */}
     <div className="absolute inset-0 z-0 pointer-events-none">
       <GlassSurface
         width="100%"
@@ -87,14 +90,13 @@ export const Header: React.FC = () => {
       />
     </div>
 
-    {/* Header content above the GlassSurface */}
     <div className="relative z-10 flex h-full w-full items-center justify-between px-4 md:px-6">
       <h1 className="text-xl md:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
         Pixel Walls
       </h1>
       <div className="flex items-center gap-3 md:gap-4">
         <ThemeToggle />
-        <UserAvatar />
+        <UserAvatar onProfileClick={onProfileClick} />
       </div>
     </div>
   </div>

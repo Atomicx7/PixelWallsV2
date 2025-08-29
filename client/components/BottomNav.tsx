@@ -5,6 +5,7 @@ import { useTheme } from '../App';
 interface BottomNavProps {
     onUploadClick: () => void;
     onLogout: () => void;
+    onHomeClick: () => void;
 }
 
 const HomeIcon: React.FC = () => (
@@ -25,7 +26,7 @@ const LogoutIcon: React.FC = () => (
     </svg>
 );
 
-export const BottomNav: React.FC<BottomNavProps> = ({ onUploadClick, onLogout }) => {
+export const BottomNav: React.FC<BottomNavProps> = ({ onUploadClick, onLogout, onHomeClick }) => {
     const { theme } = useTheme();
     
     const NavButton: React.FC<{ onClick?: () => void; children: React.ReactNode; 'aria-label': string }> = ({ onClick, children, 'aria-label': ariaLabel }) => (
@@ -55,7 +56,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onUploadClick, onLogout })
                     distortionScale={-60}
                 />
                 <div className="absolute inset-0 w-full h-full flex items-center justify-around">
-                    <NavButton aria-label="Home">
+                    <NavButton onClick={onHomeClick} aria-label="Home">
                         <HomeIcon />
                     </NavButton>
                     <button

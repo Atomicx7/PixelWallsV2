@@ -6,7 +6,7 @@ export const WALLPAPERS: Wallpaper[] = [
   // Fix: Changed id from number to string to match the Wallpaper interface.
   { id: '1', width: 400, height: 550, url: 'https://picsum.photos/id/119/400/550', alt: 'Pastel building facade', category: 'Pastel', author: 'John Doe' },
   // Fix: Changed id from number to string to match the Wallpaper interface.
-  { id: '2', width: 500, height: 400, url: 'https://picsum.photos/id/1016/500/400', alt: 'Serene lake view', category: 'Minimalist', author: 'Jane Smith' },
+  { id: '2', width: 500, height: 400, url: 'https://picsum.photos/id/1016/500/400', alt: 'Serene lake view', category: 'Minimalist', author: 'Jane Doe' },
   // Fix: Changed id from number to string to match the Wallpaper interface.
   { id: '3', width: 400, height: 500, url: 'https://picsum.photos/id/10/400/500', alt: 'Modern interior with a plant', category: 'Interiors', author: 'Alex Johnson' },
   // Fix: Changed id from number to string to match the Wallpaper interface.
@@ -22,7 +22,7 @@ export const WALLPAPERS: Wallpaper[] = [
   // Fix: Changed id from number to string to match the Wallpaper interface.
   { id: '9', width: 400, height: 550, url: 'https://picsum.photos/id/1050/400/550', alt: 'Abstract light trails', category: 'Abstract', author: 'David Wilson' },
   // Fix: Changed id from number to string to match the Wallpaper interface.
-  { id: '10', width: 400, height: 350, url: 'https://picsum.photos/id/1060/400/350', alt: 'Desk setup', category: 'Minimalist', author: 'Laura Taylor' },
+  { id: '10', width: 400, height: 350, url: 'https://picsum.photos/id/1060/400/350', alt: 'Desk setup', category: 'Minimalist', author: 'Jane Doe' },
   // Fix: Changed id from number to string to match the Wallpaper interface.
   { id: '11', width: 500, height: 650, url: 'https://picsum.photos/id/107/500/650', alt: 'Pink wall texture', category: 'Pastel', author: 'Robert Miller' },
   // Fix: Changed id from number to string to match the Wallpaper interface.

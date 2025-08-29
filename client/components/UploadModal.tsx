@@ -40,7 +40,6 @@ const SpinnerIcon: React.FC = () => (
     </svg>
 );
 
-// --- Form Components (moved outside main component to prevent re-rendering bug) ---
 const InputField: React.FC<{ icon: React.ReactNode; children: React.ReactNode }> = ({ icon, children }) => (
     <div className="relative">
         <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
@@ -53,7 +52,7 @@ const InputField: React.FC<{ icon: React.ReactNode; children: React.ReactNode }>
 const CustomInput: React.FC<React.InputHTMLAttributes<HTMLInputElement>> = (props) => (
     <input
         {...props}
-        className="block w-full rounded-lg border border-gray-200/50 dark:border-slate-700/50 bg-white/50 dark:bg-slate-800/50 py-3 pl-10 pr-4 text-slate-800 dark:text-slate-200 shadow-sm placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition"
+        className="block w-full rounded-lg border border-gray-200/50 dark:border-slate-700/50 bg-white/50 dark:bg-slate-800/50 py-3 pl-10 pr-4 text-slate-800 dark:text-slate-200 shadow-sm placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition read-only:bg-gray-100 dark:read-only:bg-slate-800/60 read-only:cursor-not-allowed"
     />
 );
 
@@ -64,7 +63,6 @@ const CustomSelect: React.FC<React.SelectHTMLAttributes<HTMLSelectElement>> = (p
     />
 );
 
-// --- Main Modal Component ---
 interface UploadModalProps {
   onClose: () => void;
   onUpload: (data: { file: File, title: string, author: string, category: Category }) => Promise<void>;
@@ -75,7 +73,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({ onClose, onUpload, cat
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [title, setTitle] = useState('');
-  const [author, setAuthor] = useState('');
+  const [author] = useState('Jane Doe'); // Hardcoded author
   const [category, setCategory] = useState<Category>(categories.find(c => c !== 'All') || 'Abstract');
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -169,7 +167,6 @@ export const UploadModal: React.FC<UploadModalProps> = ({ onClose, onUpload, cat
       >
         <div className="relative w-full max-h-[90vh] flex flex-col overflow-hidden text-slate-800 dark:text-slate-200">
           <form onSubmit={handleSubmit} className="flex flex-col h-full">
-            {/* Header */}
             <div className="flex items-center justify-between p-6 flex-shrink-0">
               <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Upload New Wallpaper</h2>
               <button type="button" onClick={onClose} className="text-slate-400 bg-black/5 dark:bg-white/5 w-10 h-10 rounded-full flex items-center justify-center hover:text-slate-800 dark:hover:text-white transition-colors" aria-label="Close">
@@ -177,9 +174,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({ onClose, onUpload, cat
               </button>
             </div>
 
-            {/* Body */}
             <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6 overflow-y-auto">
-              {/* Left Side: Uploader/Preview */}
               <div className="flex flex-col space-y-4">
                 {previewUrl ? (
                   <div className="w-full aspect-w-3 aspect-h-4 bg-gray-200 dark:bg-slate-800 rounded-lg overflow-hidden relative group">
@@ -209,7 +204,6 @@ export const UploadModal: React.FC<UploadModalProps> = ({ onClose, onUpload, cat
                 <input type="file" ref={fileInputRef} onChange={handleInputChange} accept="image/*" className="hidden" />
               </div>
 
-              {/* Right Side: Form Fields */}
               <div className="flex flex-col space-y-4">
                 <div>
                   <label htmlFor="title" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Title</label>
@@ -220,14 +214,14 @@ export const UploadModal: React.FC<UploadModalProps> = ({ onClose, onUpload, cat
                 <div>
                   <label htmlFor="author" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Author</label>
                   <InputField icon={<UserIcon className="w-5 h-5 text-slate-400" />}>
-                    <CustomInput type="text" id="author" value={author} onChange={e => setAuthor(e.target.value)} required placeholder="Jane Doe" />
+                    <CustomInput type="text" id="author" value={author} readOnly />
                   </InputField>
                 </div>
                 <div>
                   <label htmlFor="category" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Category</label>
                   <InputField icon={<TagIcon className="w-5 h-5 text-slate-400" />}>
                     <CustomSelect id="category" value={category} onChange={e => setCategory(e.target.value as Category)} required>
-                      {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                      {categories.map(cat => cat !== 'All' && <option key={cat} value={cat}>{cat}</option>)}
                     </CustomSelect>
                   </InputField>
                 </div>
@@ -240,7 +234,6 @@ export const UploadModal: React.FC<UploadModalProps> = ({ onClose, onUpload, cat
               </div>
             </div>
             
-            {/* Footer */}
             <div className="p-6 flex-shrink-0 mt-auto">
               <button type="submit" disabled={!isFormValid || isLoading} className="w-full flex items-center justify-center bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-slate-900 focus:ring-blue-500 disabled:bg-gray-400 dark:disabled:bg-slate-700 disabled:cursor-not-allowed transform hover:scale-105 disabled:scale-100">
                 {isLoading && <SpinnerIcon />}
