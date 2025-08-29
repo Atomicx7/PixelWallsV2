@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Credentials and tokens
+server/google-credentials.json
+server/oauth-credentials.json
+server/token.json
+**/*.pem
+**/*.key
+
+# Environment files
+.env
+**/.env
+!.env.example
+
+# Build files
+dist/
+build/
+
+# Logs
+*.log
+npm-debug.log*

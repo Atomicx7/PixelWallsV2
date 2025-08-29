@@ -1,0 +1,5 @@
+{
+  "name": "Image Gallery V2",
+  "description": "A visually stunning image gallery with a sleek dark theme. Features user authentication, category filtering, a floating navbar, and user image uploads.",
+  "requestFramePermissions": []
+}
