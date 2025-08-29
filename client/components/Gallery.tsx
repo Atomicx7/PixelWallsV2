@@ -60,21 +60,22 @@ export function Gallery({ onLogout }: GalleryProps) {
   const [selectedWallpaper, setSelectedWallpaper] = useState<Wallpaper | null>(null);
   const [isUploadModalOpen, setUploadModalOpen] = useState(false);
 
+  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
   useEffect(() => {
     const fetchWallpapers = async () => {
       setLoading(true);
       setError(null);
       try {
-        const response = await fetch('http://localhost:3001/api/wallpapers');
+        const response = await fetch(`${apiUrl}/api/wallpapers`);
         if (!response.ok) {
-          throw new Error('Failed to fetch from the backend.');
+          throw new Error(`Failed to fetch from the backend: ${response.statusText}`);
         }
         const data: Wallpaper[] = await response.json();
         setWallpapers(data);
       } catch (err) {
         console.error("Failed to fetch wallpapers:", err);
-        setError("Could not connect to the backend server. Is it running? Displaying sample wallpapers as a fallback.");
-        setWallpapers(WALLPAPERS); // Fallback to local data
+        setError("Could not connect to the backend server. Please try again later.");
       } finally {
         setLoading(false);
       }
@@ -104,7 +105,6 @@ export function Gallery({ onLogout }: GalleryProps) {
 
   const handleImageUpload = async (data: UploadData) => {
     const { file, title, author, category } = data;
-
     const formData = new FormData();
     formData.append('image', file);
     formData.append('alt', title);
@@ -112,17 +112,17 @@ export function Gallery({ onLogout }: GalleryProps) {
     formData.append('category', category);
 
     try {
-      const response = await fetch('http://localhost:3001/api/upload', {
+      const response = await fetch(`${apiUrl}/api/upload`, {
         method: 'POST',
         body: formData,
       });
       
       if (!response.ok) {
-        throw new Error('Upload failed with status: ' + response.statusText);
+        throw new Error(`Upload failed: ${response.statusText}`);
       }
       
       const newWallpaper = await response.json();
-      setWallpapers(prev => [newWallpaper, ...prev]); // Add new wallpaper to the top of the list
+      setWallpapers(prev => [newWallpaper, ...prev]);
       handleCloseUploadModal();
     } catch (error) {
       console.error("Upload failed:", error);
