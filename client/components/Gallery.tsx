@@ -83,7 +83,7 @@ export function Gallery({ wallpapers, loading, error, onLogout, onProfileClick, 
   const handleImageUpload = async (data: UploadData) => {
     try {
         await onUpload(data);
-        handleCloseUploadModal(); // Close modal only on success
+        handleCloseUploadModal(); // Close the modal only on success
     } catch (err) {
         // Re-throw to be caught by the modal
         throw err;
