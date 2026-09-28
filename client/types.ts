@@ -8,4 +8,14 @@ export interface Wallpaper {
   author: string;
   width: number;
   height: number;
+  provider?: string; // cloudinary | googledrive | imgbb | imagekit | catbox
+  fullUrl?: string; // original-quality URL (Cloudinary) for downloads
+  createdAt?: string;
+}
+
+export interface StorageConfig {
+  providers: string[];
+  primary: string | null;
+  maxUploadMB: number;
+  features: { fileUpload: boolean; urlImport: boolean };
 }

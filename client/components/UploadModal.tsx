@@ -65,12 +65,14 @@ const CustomSelect: React.FC<React.SelectHTMLAttributes<HTMLSelectElement>> = (p
 
 interface UploadModalProps {
   onClose: () => void;
-  onUpload: (data: { file: File, title: string, author: string, category: Category }) => Promise<void>;
+  onUpload: (data: { file?: File, imageUrl?: string, title: string, author: string, category: Category }) => Promise<void>;
   categories: Category[];
 }
 
 export const UploadModal: React.FC<UploadModalProps> = ({ onClose, onUpload, categories }) => {
+  const [mode, setMode] = useState<'file' | 'url'>('file');
   const [file, setFile] = useState<File | null>(null);
+  const [imageUrl, setImageUrl] = useState('');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [author] = useState('Jane Doe'); // Hardcoded author
@@ -130,12 +132,12 @@ export const UploadModal: React.FC<UploadModalProps> = ({ onClose, onUpload, cat
     }
   };
 
-  const isFormValid = file && title.trim() && author.trim() && category;
+  const isFormValid = (mode === 'file' ? !!file : imageUrl.trim().startsWith('http')) && title.trim() && author.trim() && category;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isFormValid) {
-        setError("Please fill in all fields and select an image.");
+        setError(mode === 'file' ? "Please fill in all fields and select an image." : "Please fill in all fields and paste a valid image URL (Unsplash, Pexels, picsum…).");
         return;
     }
     
@@ -143,7 +145,11 @@ export const UploadModal: React.FC<UploadModalProps> = ({ onClose, onUpload, cat
     setIsLoading(true);
 
     try {
-        await onUpload({ file, title, author, category });
+        if (mode === 'file') {
+          await onUpload({ file: file!, title, author, category });
+        } else {
+          await onUpload({ imageUrl: imageUrl.trim(), title, author, category });
+        }
     } catch (err) {
         const message = err instanceof Error ? err.message : 'An unknown error occurred.';
         setError(`Upload failed: ${message}. Please check your backend server's console for more details.`);
@@ -173,35 +179,55 @@ export const UploadModal: React.FC<UploadModalProps> = ({ onClose, onUpload, cat
                 <CloseIcon />
               </button>
             </div>
+            <div className="px-6 flex gap-2">
+              <button type="button" onClick={() => setMode('file')} className={`px-4 py-1.5 rounded-full text-sm font-semibold transition ${mode === 'file' ? 'bg-blue-600 text-white' : 'bg-black/5 dark:bg-white/10 text-slate-600 dark:text-slate-300'}`}>Upload file</button>
+              <button type="button" onClick={() => setMode('url')} className={`px-4 py-1.5 rounded-full text-sm font-semibold transition ${mode === 'url' ? 'bg-blue-600 text-white' : 'bg-black/5 dark:bg-white/10 text-slate-600 dark:text-slate-300'}`}>Import from URL</button>
+            </div>
 
             <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6 overflow-y-auto">
               <div className="flex flex-col space-y-4">
-                {previewUrl ? (
-                  <div className="w-full aspect-w-3 aspect-h-4 bg-gray-200 dark:bg-slate-800 rounded-lg overflow-hidden relative group">
-                    <img src={previewUrl} alt="Image preview" className="w-full h-full object-cover" />
-                    <div 
-                      onClick={() => fileInputRef.current?.click()}
-                      className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                    >
-                      <p className="text-white font-semibold">Change image</p>
-                    </div>
-                  </div>
+                {mode === 'file' ? (
+                  <>
+                    {previewUrl ? (
+                      <div className="w-full aspect-w-3 aspect-h-4 bg-gray-200 dark:bg-slate-800 rounded-lg overflow-hidden relative group">
+                        <img src={previewUrl} alt="Image preview" className="w-full h-full object-cover" />
+                        <div 
+                          onClick={() => fileInputRef.current?.click()}
+                          className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                        >
+                          <p className="text-white font-semibold">Change image</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div 
+                        onDragOver={onDragOver}
+                        onDragLeave={onDragLeave}
+                        onDrop={onDrop}
+                        onClick={() => fileInputRef.current?.click()}
+                        className={`flex flex-col items-center justify-center p-8 border-2 border-dashed rounded-lg cursor-pointer transition-colors h-full ${isDragging ? 'border-blue-500 bg-blue-500/10' : 'border-gray-300 dark:border-slate-700 hover:border-blue-500'}`}
+                      >
+                        <UploadCloudIcon className="w-16 h-16 text-gray-400 dark:text-slate-500 transition-transform" />
+                        <p className="mt-4 text-center text-sm font-medium text-gray-600 dark:text-slate-300">
+                          Drag & drop or <span className="text-blue-500 dark:text-blue-400">click to browse</span>
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-slate-500 mt-1">PNG, JPG up to 10MB — stored on Cloudinary / free media host</p>
+                      </div>
+                    )}
+                    <input type="file" ref={fileInputRef} onChange={handleInputChange} accept="image/*" className="hidden" />
+                  </>
                 ) : (
-                  <div 
-                    onDragOver={onDragOver}
-                    onDragLeave={onDragLeave}
-                    onDrop={onDrop}
-                    onClick={() => fileInputRef.current?.click()}
-                    className={`flex flex-col items-center justify-center p-8 border-2 border-dashed rounded-lg cursor-pointer transition-colors h-full ${isDragging ? 'border-blue-500 bg-blue-500/10' : 'border-gray-300 dark:border-slate-700 hover:border-blue-500'}`}
-                  >
-                    <UploadCloudIcon className="w-16 h-16 text-gray-400 dark:text-slate-500 transition-transform" />
-                    <p className="mt-4 text-center text-sm font-medium text-gray-600 dark:text-slate-300">
-                      Drag & drop or <span className="text-blue-500 dark:text-blue-400">click to browse</span>
-                    </p>
-                    <p className="text-xs text-gray-500 dark:text-slate-500 mt-1">PNG, JPG up to 10MB</p>
+                  <div className="flex flex-col space-y-3">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-slate-300">Image URL (Unsplash, Pexels, picsum.photos…)</label>
+                    <InputField icon={<TitleIcon className="w-5 h-5 text-slate-400" />}>
+                      <CustomInput type="url" value={imageUrl} onChange={e => { setImageUrl(e.target.value); setError(null); }} placeholder="https://images.unsplash.com/…" />
+                    </InputField>
+                    {imageUrl.trim().startsWith('http') ? (
+                      <img src={imageUrl} alt="URL preview" className="w-full h-64 object-cover rounded-lg bg-gray-200 dark:bg-slate-800" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                    ) : (
+                      <p className="text-xs text-gray-500 dark:text-slate-500">Paste a direct image link — the backend will fetch & re-host it on your configured storage (Cloudinary recommended).</p>
+                    )}
                   </div>
                 )}
-                <input type="file" ref={fileInputRef} onChange={handleInputChange} accept="image/*" className="hidden" />
               </div>
 
               <div className="flex flex-col space-y-4">

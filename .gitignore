@@ -12,7 +12,12 @@ server/token.json
 # Environment files
 .env
 **/.env
+**/.env.local
 !.env.example
+!**/.env.example
+
+# Local media metadata (regenerated; don't commit uploads index)
+server/data/wallpapers.json
 
 # Build files
 dist/
