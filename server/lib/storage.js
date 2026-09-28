@@ -81,6 +81,14 @@ async function listAll() {
     const tb = b.createdAt ? Date.parse(b.createdAt) : 0;
     return tb - ta;
   });
+  // Dedupe by provider+id (metadata store can hold repeats)
+  const seen = new Set();
+  merged = merged.filter((w) => {
+    const k = `${w.provider || ''}:${w.id}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
   return merged;
 }
 

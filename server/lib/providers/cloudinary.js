@@ -46,7 +46,15 @@ function uploadBuffer(buffer, { alt, author, category, mimetype, filename }) {
         },
         tags: ['pixelwalls', String(category || 'Abstract').toLowerCase()],
       },
-      (error, result) => (error ? reject(error) : resolve(result))
+      (error, result) => {
+        if (error) return reject(error);
+        // Normalize to the Wallpaper shape (and never leak api_key/secret).
+        try {
+          resolve(toWallpaper(result));
+        } catch (e) {
+          reject(e);
+        }
+      }
     );
     stream.end(buffer);
   });
