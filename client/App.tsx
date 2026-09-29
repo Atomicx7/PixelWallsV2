@@ -1,9 +1,11 @@
 import React, { useState, createContext, useContext, useEffect, useMemo } from 'react';
 import { LoginPage } from './components/LoginPage';
+import { SignupPage } from './components/SignupPage';
 import { Gallery } from './components/Gallery';
 import { ProfilePage } from './components/ProfilePage';
-import { Wallpaper, Category, StorageConfig } from './types';
+import { Wallpaper, Category, StorageConfig, User } from './types';
 import { WALLPAPERS } from './constants';
+import { apiBase, apiUrl, fetchApi } from './api';
 
 // --- Theme Management ---
 type Theme = 'light' | 'dark';
@@ -53,10 +55,24 @@ const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 };
 
-const API_BASE_URL =
-  (import.meta as any).env?.VITE_API_BASE_URL ||
-  (import.meta as any).env?.VITE_API_URL ||
-  'https://pixel-walls-v2.vercel.app';
+const TOKEN_KEY = 'pixelwalls_token';
+const USER_KEY = 'pixelwalls_user';
+
+// Deprecated: use apiBase() / apiUrl() / fetchApi() from './api' (trailing-slash safe + retry).
+const API_BASE_URL = apiBase();
+
+export function getAuthToken(): string | null {
+  try {
+    return localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function authHeaders(extra?: Record<string, string>): Record<string, string> {
+  const token = getAuthToken();
+  return token ? { ...(extra || {}), Authorization: `Bearer ${token}` } : { ...(extra || {}) };
+}
 
 interface UploadData {
   file?: File;
@@ -66,7 +82,7 @@ interface UploadData {
   category: Category;
 }
 
-const MainApp: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
+const MainApp: React.FC<{ user: User; onLogout: () => void }> = ({ user, onLogout }) => {
   const [view, setView] = useState<'gallery' | 'profile'>('gallery');
   const [wallpapers, setWallpapers] = useState<Wallpaper[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -74,7 +90,7 @@ const MainApp: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   const [storage, setStorage] = useState<StorageConfig | null>(null);
   
   useEffect(() => {
-    fetch(`${API_BASE_URL}/api/config`)
+    fetchApi('/api/config', undefined, 0)
       .then(r => (r.ok ? r.json() : null))
       .then(cfg => cfg && setStorage(cfg))
       .catch(() => {});
@@ -85,12 +101,18 @@ const MainApp: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
       setLoading(true);
       setError(null);
       try {
-        const response = await fetch(`${API_BASE_URL}/api/wallpapers`);
+        // 1 retry rides out Vercel cold starts / transient 504s.
+        const response = await fetchApi('/api/wallpapers', {
+          headers: authHeaders(),
+        });
         if (!response.ok) {
-          throw new Error('Failed to fetch from the backend.');
+          throw new Error(`Backend responded with status ${response.status}.`);
         }
         const data: Wallpaper[] = await response.json();
         setWallpapers(data);
+        if (Array.isArray(data) && data.length === 0) {
+          setError(null); // connected, just empty — Gallery shows its empty state
+        }
       } catch (err) {
         console.error("Failed to fetch wallpapers:", err);
         setError("Could not connect to the server. Displaying sample wallpapers as a fallback.");
@@ -108,26 +130,27 @@ const MainApp: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
     let headers: Record<string, string> | undefined;
 
     if (isUrlImport) {
-      headers = { 'Content-Type': 'application/json' };
+      headers = authHeaders({ 'Content-Type': 'application/json' });
       body = JSON.stringify({
         imageUrl: data.imageUrl,
         alt: data.title,
-        author: data.author,
+        author: data.author || user.name,
         category: data.category,
       });
     } else if (data.file) {
       const formData = new FormData();
       formData.append('image', data.file);
       formData.append('alt', data.title);
-      formData.append('author', data.author);
+      formData.append('author', data.author || user.name);
       formData.append('category', data.category);
       body = formData;
+      headers = authHeaders();
     } else {
       throw new Error('Select a file or paste an image URL.');
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/upload`, {
+      const response = await fetch(apiUrl('/api/upload'), {
         method: 'POST',
         headers,
         body: body as any,
@@ -157,7 +180,7 @@ const MainApp: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   const navigateToGallery = () => setView('gallery');
 
   if (view === 'profile') {
-    return <ProfilePage allWallpapers={wallpapers} onBackToGallery={navigateToGallery} onHomeClick={navigateToGallery} onLogout={onLogout} />;
+    return <ProfilePage user={user} allWallpapers={wallpapers} onBackToGallery={navigateToGallery} onHomeClick={navigateToGallery} onLogout={onLogout} />;
   }
 
   return (
@@ -176,18 +199,66 @@ const MainApp: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
 
 
 function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [user, setUser] = useState<User | null>(() => {
+    try {
+      const raw = localStorage.getItem(USER_KEY);
+      return raw ? (JSON.parse(raw) as User) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [checking, setChecking] = useState<boolean>(!!getAuthToken());
+  const [authView, setAuthView] = useState<'signin' | 'signup'>('signin');
 
-  const handleLogin = () => setIsAuthenticated(true);
-  const handleLogout = () => setIsAuthenticated(false);
+  // Validate persisted token against Neon-backed /me on boot
+  useEffect(() => {
+    const token = getAuthToken();
+    if (!token) {
+      setChecking(false);
+      return;
+    }
+    fetch(apiUrl('/api/auth/me'), {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(async (r) => {
+        if (!r.ok) throw new Error('invalid token');
+        const data = await r.json();
+        if (data?.user) {
+          setUser(data.user);
+          localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+        }
+      })
+      .catch(() => {
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(USER_KEY);
+        setUser(null);
+      })
+      .finally(() => setChecking(false));
+  }, []);
+
+  const handleLogin = (loggedInUser: User, token: string) => {
+    localStorage.setItem(TOKEN_KEY, token);
+    localStorage.setItem(USER_KEY, JSON.stringify(loggedInUser));
+    setUser(loggedInUser);
+  };
+  const handleLogout = () => {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+    setUser(null);
+    setAuthView('signin');
+  };
 
   return (
     <ThemeProvider>
       <div className="min-h-screen bg-gray-50 dark:bg-black text-slate-800 dark:text-slate-200 font-sans transition-colors duration-300">
-        {isAuthenticated ? (
-          <MainApp onLogout={handleLogout} />
+        {checking ? (
+          <div className="min-h-screen flex items-center justify-center text-sm text-slate-500">Restoring session…</div>
+        ) : user ? (
+          <MainApp user={user} onLogout={handleLogout} />
+        ) : authView === 'signup' ? (
+          <SignupPage onLogin={handleLogin} onSwitchToSignin={() => setAuthView('signin')} />
         ) : (
-          <LoginPage onLogin={handleLogin} />
+          <LoginPage onLogin={handleLogin} onSwitchToSignup={() => setAuthView('signup')} />
         )}
       </div>
     </ThemeProvider>

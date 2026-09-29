@@ -1,0 +1,148 @@
+// lib/auth.js — JWT auth backed by Neon Postgres.
+// Routes: POST /api/auth/signup, POST /api/auth/login, GET /api/auth/me
+const express = require('express');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const db = require('./db');
+
+const router = express.Router();
+
+const JWT_SECRET = () => process.env.JWT_SECRET || process.env.AUTH_SECRET || '';
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
+
+function signToken(user) {
+  const secret = JWT_SECRET();
+  if (!secret) throw new Error('JWT_SECRET is not set. Add it to server/.env');
+  return jwt.sign({ sub: user.id, email: user.email, name: user.name }, secret, {
+    expiresIn: JWT_EXPIRES_IN,
+  });
+}
+
+function publicUser(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    createdAt: row.created_at,
+  };
+}
+
+function requireDb(req, res) {
+  if (!db.isConfigured()) {
+    res.status(503).json({
+      error: 'Auth database not configured.',
+      details: 'Set DATABASE_URL (Neon connection string) in server/.env or Vercel env vars.',
+    });
+    return false;
+  }
+  if (!JWT_SECRET()) {
+    res.status(500).json({
+      error: 'JWT_SECRET not configured.',
+      details: 'Set JWT_SECRET in server/.env or Vercel env vars.',
+    });
+    return false;
+  }
+  return true;
+}
+
+function isValidEmail(email) {
+  return typeof email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+}
+
+// Middleware: attaches req.user if a valid Bearer token is present.
+// If { required: true }, rejects missing/invalid tokens with 401.
+function authMiddleware({ required = false } = {}) {
+  return (req, res, next) => {
+    const header = req.headers.authorization || '';
+    const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+    if (!token) {
+      if (required) return res.status(401).json({ error: 'Authentication required.' });
+      req.user = null;
+      return next();
+    }
+    try {
+      const secret = JWT_SECRET();
+      if (!secret) throw new Error('missing secret');
+      req.user = jwt.verify(token, secret);
+      return next();
+    } catch (err) {
+      if (required) return res.status(401).json({ error: 'Invalid or expired token.' });
+      req.user = null;
+      return next();
+    }
+  };
+}
+
+// POST /api/auth/signup { name, email, password }
+router.post('/signup', async (req, res) => {
+  try {
+    if (!requireDb(req, res)) return;
+    await db.initDb();
+    const { name, email, password } = req.body || {};
+    if (!name || !String(name).trim()) return res.status(400).json({ error: 'Name is required.' });
+    if (!isValidEmail(email)) return res.status(400).json({ error: 'A valid email is required.' });
+    if (!password || String(password).length < 8)
+      return res.status(400).json({ error: 'Password must be at least 8 characters.' });
+
+    const sql = db.getSql();
+    const normalizedEmail = String(email).trim().toLowerCase();
+
+    const existing = await sql`SELECT id FROM users WHERE lower(email) = ${normalizedEmail} LIMIT 1`;
+    if (existing.length > 0) return res.status(409).json({ error: 'An account with this email already exists.' });
+
+    const passwordHash = await bcrypt.hash(String(password), 10);
+    const rows =
+      await sql`INSERT INTO users (name, email, password_hash) VALUES (${String(name).trim()}, ${String(email).trim()}, ${passwordHash}) RETURNING id, name, email, created_at`;
+    const user = publicUser(rows[0]);
+    const token = signToken(user);
+    res.status(201).json({ user, token });
+  } catch (err) {
+    console.error('[auth] signup error:', err);
+    res.status(500).json({ error: 'Signup failed.', details: err.message });
+  }
+});
+
+// POST /api/auth/login { email, password }
+router.post('/login', async (req, res) => {
+  try {
+    if (!requireDb(req, res)) return;
+    await db.initDb();
+    const { email, password } = req.body || {};
+    if (!isValidEmail(email)) return res.status(400).json({ error: 'A valid email is required.' });
+    if (!password) return res.status(400).json({ error: 'Password is required.' });
+
+    const sql = db.getSql();
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const rows = await sql`SELECT id, name, email, password_hash, created_at FROM users WHERE lower(email) = ${normalizedEmail} LIMIT 1`;
+    if (rows.length === 0) return res.status(401).json({ error: 'Invalid email or password.' });
+
+    const row = rows[0];
+    const ok = await bcrypt.compare(String(password), row.password_hash);
+    if (!ok) return res.status(401).json({ error: 'Invalid email or password.' });
+
+    const user = publicUser(row);
+    const token = signToken(user);
+    res.json({ user, token });
+  } catch (err) {
+    console.error('[auth] login error:', err);
+    res.status(500).json({ error: 'Login failed.', details: err.message });
+  }
+});
+
+// GET /api/auth/me — validate token, return user
+router.get('/me', authMiddleware({ required: true }), async (req, res) => {
+  try {
+    if (!requireDb(req, res)) return;
+    await db.initDb();
+    const sql = db.getSql();
+    const rows = await sql`SELECT id, name, email, created_at FROM users WHERE id = ${req.user.sub} LIMIT 1`;
+    if (rows.length === 0) return res.status(401).json({ error: 'User no longer exists.' });
+    res.json({ user: publicUser(rows[0]) });
+  } catch (err) {
+    console.error('[auth] me error:', err);
+    res.status(500).json({ error: 'Failed to fetch user.', details: err.message });
+  }
+});
+
+module.exports = { router, authMiddleware, signToken };

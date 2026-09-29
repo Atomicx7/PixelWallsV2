@@ -7,6 +7,14 @@ const multer = require('multer');
 const cors = require('cors');
 const axios = require('axios');
 const storage = require('./lib/storage');
+const db = require('./lib/db');
+const { router: authRouter, authMiddleware } = require('./lib/auth');
+
+// Best-effort DB init on boot (auth needs Neon). Don't crash media API if DB is down.
+db.initDb().then(
+  () => console.log('[db] ready (Neon)'),
+  (e) => console.warn('[db] not ready:', e.message)
+);
 
 const app = express();
 
@@ -52,11 +60,17 @@ apiRouter.get('/config', (req, res) => {
     primary: storage.primaryProvider(),
     maxUploadMB: Number(process.env.MAX_UPLOAD_MB) || 15,
     features: { fileUpload: true, urlImport: true },
+    auth: { enabled: db.isConfigured(), requiredForUpload: process.env.REQUIRE_AUTH_UPLOAD === 'true' },
   });
 });
 
 apiRouter.get('/health', (req, res) => {
-  res.json({ ok: true, primary: storage.primaryProvider(), providers: storage.availableProviders() });
+  res.json({
+    ok: true,
+    primary: storage.primaryProvider(),
+    providers: storage.availableProviders(),
+    db: db.isConfigured() ? 'configured' : 'missing-DATABASE_URL',
+  });
 });
 
 function validateMeta({ alt, author, category }) {
@@ -78,8 +92,12 @@ async function bufferFromUrl(imageUrl) {
 }
 
 // POST /api/upload — multipart `image` file OR JSON { imageUrl, alt, author, category }
-apiRouter.post('/upload', upload.single('image'), async (req, res) => {
+// Auth: optional by default; set REQUIRE_AUTH_UPLOAD=true to require a Bearer token.
+apiRouter.post('/upload', authMiddleware({ required: false }), upload.single('image'), async (req, res) => {
   try {
+    if (process.env.REQUIRE_AUTH_UPLOAD === 'true' && !req.user) {
+      return res.status(401).json({ error: 'Authentication required to upload. Sign in first.' });
+    }
     const { alt, author, category } = req.body;
     const err = validateMeta({ alt, author, category });
     if (err) return res.status(400).json({ error: err });
@@ -147,6 +165,7 @@ apiRouter.get('/wallpapers', async (req, res) => {
 });
 
 app.use('/api', apiRouter);
+app.use('/api/auth', authRouter);
 
 app.get('/', (req, res) => {
   res.json({ name: 'PixelWalls media API', primary: storage.primaryProvider() });

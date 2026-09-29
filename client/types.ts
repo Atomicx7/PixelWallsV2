@@ -18,4 +18,17 @@ export interface StorageConfig {
   primary: string | null;
   maxUploadMB: number;
   features: { fileUpload: boolean; urlImport: boolean };
+  auth?: { enabled: boolean; requiredForUpload: boolean };
+}
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  createdAt?: string;
+}
+
+export interface AuthResponse {
+  user: User;
+  token: string;
 }

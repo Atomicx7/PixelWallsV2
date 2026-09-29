@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Wallpaper } from '../types';
+import { Wallpaper, User } from '../types';
 import { useTheme } from '../App';
 import { ImageGrid } from './ImageGrid';
 import { ImageModal } from './ImageModal';
@@ -34,15 +34,16 @@ const StatCard: React.FC<{ value: string; label: string }> = ({ value, label }) 
 };
 
 interface ProfilePageProps {
+    user: User;
     allWallpapers: Wallpaper[];
     onBackToGallery: () => void;
     onHomeClick: () => void;
     onLogout: () => void;
 }
 
-export const ProfilePage: React.FC<ProfilePageProps> = ({ allWallpapers, onBackToGallery, onHomeClick, onLogout }) => {
+export const ProfilePage: React.FC<ProfilePageProps> = ({ user, allWallpapers, onBackToGallery, onHomeClick, onLogout }) => {
     const [selectedWallpaper, setSelectedWallpaper] = useState<Wallpaper | null>(null);
-    const userName = "Jane Doe";
+    const userName = user.name || "Jane Doe";
 
     const userWallpapers = useMemo(() => {
         return allWallpapers.filter(wp => wp.author === userName);
@@ -75,7 +76,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ allWallpapers, onBackT
                             </svg>
                         </div>
                         <h1 className="mt-4 text-4xl font-bold text-slate-900 dark:text-white">{userName}</h1>
-                        <p className="mt-1 text-slate-500 dark:text-slate-400">Wallpaper Enthusiast</p>
+                        <p className="mt-1 text-slate-500 dark:text-slate-400">{user.email}</p>
                     </div>
                 </div>
 
