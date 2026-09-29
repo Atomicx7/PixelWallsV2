@@ -14,6 +14,7 @@ interface GalleryProps {
   loading: boolean;
   error: string | null;
   storage?: StorageConfig | null;
+  onLogout: () => void;
   onHomeClick: () => void;
   onUpload: (data: UploadData) => Promise<void>;
 }
@@ -57,7 +58,7 @@ const Hero: React.FC = () => {
     );
 };
 
-export function Gallery({ wallpapers, loading, error, storage, onHomeClick, onUpload }: GalleryProps) {
+export function Gallery({ wallpapers, loading, error, storage, onLogout, onHomeClick, onUpload }: GalleryProps) {
   const [activeCategory, setActiveCategory] = useState<Category>('All');
   const [selectedWallpaper, setSelectedWallpaper] = useState<Wallpaper | null>(null);
   const [isUploadModalOpen, setUploadModalOpen] = useState(false);
@@ -133,7 +134,7 @@ export function Gallery({ wallpapers, loading, error, storage, onHomeClick, onUp
             categories={CATEGORIES.filter(c => c !== 'All')}
         />
       )}
-      <BottomNav onUploadClick={handleOpenUploadModal} onHomeClick={onHomeClick} />
+      <BottomNav onUploadClick={handleOpenUploadModal} onLogout={onLogout} onHomeClick={onHomeClick} />
     </>
   );
 }

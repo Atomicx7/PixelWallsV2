@@ -87,7 +87,7 @@ async function getCategories() {
 async function getAvatars() {
   const sql = db.getSql();
   if (!sql) return [];
-  return sql`SELECT id, url FROM avatars WHERE is_active = TRUE ORDER BY sort_order, created_at LIMIT 24`;
+  return sql`SELECT id, url FROM avatars WHERE is_active = TRUE ORDER BY sort_order, created_at LIMIT 100`;
 }
 
 // ---------------------------------------------------------------------------

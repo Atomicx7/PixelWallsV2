@@ -156,6 +156,14 @@ const MainApp: React.FC = () => {
     document.getElementById('gallery-content')?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  // No-login session reset: clears local personalization (avatar choice).
+  const handleReset = () => {
+    try {
+      localStorage.removeItem('pw_avatar');
+    } catch {}
+    navigateToGallery();
+  };
+
   return (
     <Gallery
       wallpapers={wallpapers}
@@ -163,6 +171,7 @@ const MainApp: React.FC = () => {
       error={error}
       storage={storage}
       onUpload={handleImageUpload}
+      onLogout={handleReset}
       onHomeClick={navigateToGallery}
     />
   );

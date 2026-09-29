@@ -265,7 +265,7 @@ apiRouter.get('/picker', resolveIdentity({ required: true }), async (req, res) =
       return res.status(403).json({ error: 'The picker is available to integrated apps only.' });
     }
     await db.initDb();
-    const { type = 'wallpapers', category, limit } = req.query;
+    const { type = 'wallpapers', category, search, limit } = req.query;
     if (type === 'avatars') {
       return res.json(await manage.getAvatars());
     }
@@ -274,6 +274,12 @@ apiRouter.get('/picker', resolveIdentity({ required: true }), async (req, res) =
     if (category && category !== 'All') {
       wallpapers = wallpapers.filter(
         (w) => String(w.category || '').toLowerCase() === String(category).toLowerCase()
+      );
+    }
+    if (search) {
+      const q = String(search).toLowerCase();
+      wallpapers = wallpapers.filter((w) =>
+        `${w.alt || ''} ${w.author || ''} ${w.category || ''}`.toLowerCase().includes(q)
       );
     }
     if (limit) {
