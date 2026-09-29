@@ -483,6 +483,17 @@ function AvatarsTab() {
     }
   };
 
+  const remove = async (a: AdminAvatar) => {
+    if (!window.confirm('Delete this avatar permanently? Users who selected it keep their current copy.')) return;
+    setError(null);
+    try {
+      await adminFetch(`/api/admin/avatars/${a.id}`, { method: 'DELETE' });
+      load();
+    } catch (e: any) {
+      setError(e.message);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <Err message={error} />
@@ -501,9 +512,12 @@ function AvatarsTab() {
             return (
               <div key={a.id} className={`rounded-xl border p-3 text-center ${active ? 'border-gray-200 dark:border-slate-700' : 'border-red-300 dark:border-red-800 opacity-60'}`}>
                 <img src={a.url} alt="Avatar" className="w-20 h-20 rounded-full object-cover mx-auto bg-gray-200 dark:bg-slate-800" loading="lazy" />
-                <button className={`${active ? btnDanger : btnGhost} mt-3`} onClick={() => toggle(a)}>
-                  {active ? 'Deactivate' : 'Activate'}
-                </button>
+                <div className="flex gap-2 justify-center mt-3">
+                  <button className={`${active ? btnDanger : btnGhost}`} onClick={() => toggle(a)}>
+                    {active ? 'Deactivate' : 'Activate'}
+                  </button>
+                  <button className={btnDanger} onClick={() => remove(a)}>Delete</button>
+                </div>
               </div>
             );
           })}

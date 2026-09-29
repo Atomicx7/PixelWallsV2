@@ -239,8 +239,7 @@ router.post('/avatars', async (req, res) => {
   }
 });
 
-router.patch('/avatars/:id', async (req, res) => {
-  try {
+router.patch('/avatars/:id', async (req, res) => {  try {
     if (!needDb(req, res)) return;
     await db.initDb();
     const { url, sortOrder, isActive } = req.body || {};
@@ -255,6 +254,19 @@ router.patch('/avatars/:id', async (req, res) => {
     res.json(rows[0]);
   } catch (e) {
     res.status(500).json({ error: 'Failed to update avatar.', details: e.message });
+  }
+});
+
+router.delete('/avatars/:id', async (req, res) => {
+  try {
+    if (!needDb(req, res)) return;
+    await db.initDb();
+    const sql = db.getSql();
+    const rows = await sql`DELETE FROM avatars WHERE id = ${req.params.id} RETURNING id`;
+    if (rows.length === 0) return res.status(404).json({ error: 'Avatar not found.' });
+    res.json({ deleted: rows[0].id });
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to delete avatar.', details: e.message });
   }
 });
 

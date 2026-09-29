@@ -117,7 +117,8 @@ async function initDb() {
       await client`INSERT INTO categories (name) VALUES (${cat}) ON CONFLICT (name) DO NOTHING`;
     }
 
-    // --- Predefined avatars: fixed set of 6, selectable by everyone incl. free users. ---
+    // --- Predefined avatars: fully managed from the admin panel (no auto-seed —
+    // the admin uploads exactly the set they want, including an empty set). ---
     await client`
       CREATE TABLE IF NOT EXISTS avatars (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -127,13 +128,6 @@ async function initDb() {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
     `;
-    const existingAvatars = await client`SELECT COUNT(*)::int AS n FROM avatars`;
-    if (existingAvatars[0].n === 0) {
-      const seeds = [64, 65, 91, 177, 1005, 1012];
-      for (let i = 0; i < seeds.length; i++) {
-        await client`INSERT INTO avatars (url, sort_order) VALUES (${`https://picsum.photos/id/${seeds[i]}/256/256`}, ${i})`;
-      }
-    }
     return { ok: true };
   })().catch((err) => {
     console.error('[db] init failed:', err.message);
