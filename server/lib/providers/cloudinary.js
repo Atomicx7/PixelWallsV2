@@ -91,10 +91,12 @@ function toWallpaper(r) {
   };
 }
 
-/** Extract a Cloudinary public_id from a delivery URL, or null. */
+/** Extract a Cloudinary public_id from a delivery URL, or null. Handles plain,
+ * versioned (v123/…), and single-transformation URLs (w_256,…/…) — the stored
+ * avatar URLs now carry the 256px transformation segment. */
 function publicIdFromUrl(url) {
   try {
-    const m = String(url).match(/\/image\/upload\/(?:v\d+\/)?(.+?)(?:\.[a-zA-Z0-9]+)?$/);
+    const m = String(url).match(/\/image\/upload\/(?:[a-zA-Z]+_[^/]*\/)?(?:v\d+\/)?(.+?)(?:\.[a-zA-Z0-9]+)?$/);
     return m ? m[1] : null;
   } catch {
     return null;
