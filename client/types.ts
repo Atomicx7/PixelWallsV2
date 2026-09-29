@@ -1,4 +1,4 @@
-export type Category = 'All' | 'Abstract' | 'Pastel' | 'Minimalist' | 'Interiors';
+export type Category = 'All' | 'Abstract' | 'Pastel' | 'Minimalist' | 'Interiors' | 'Avatars';
 
 export interface Wallpaper {
   id: string;  // Change from number to string to match Google Drive file IDs

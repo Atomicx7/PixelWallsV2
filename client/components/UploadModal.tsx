@@ -67,15 +67,16 @@ interface UploadModalProps {
   onClose: () => void;
   onUpload: (data: { file?: File, imageUrl?: string, title: string, author: string, category: Category }) => Promise<void>;
   categories: Category[];
+  authorName?: string;
 }
 
-export const UploadModal: React.FC<UploadModalProps> = ({ onClose, onUpload, categories }) => {
+export const UploadModal: React.FC<UploadModalProps> = ({ onClose, onUpload, categories, authorName }) => {
   const [mode, setMode] = useState<'file' | 'url'>('file');
   const [file, setFile] = useState<File | null>(null);
   const [imageUrl, setImageUrl] = useState('');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [title, setTitle] = useState('');
-  const [author] = useState('Jane Doe'); // Hardcoded author
+  const [author, setAuthor] = useState(authorName || 'Guest');
   const [category, setCategory] = useState<Category>(categories.find(c => c !== 'All') || 'Abstract');
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -240,7 +241,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({ onClose, onUpload, cat
                 <div>
                   <label htmlFor="author" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Author</label>
                   <InputField icon={<UserIcon className="w-5 h-5 text-slate-400" />}>
-                    <CustomInput type="text" id="author" value={author} readOnly />
+                    <CustomInput type="text" id="author" value={author} onChange={e => setAuthor(e.target.value)} required placeholder="Your name" />
                   </InputField>
                 </div>
                 <div>

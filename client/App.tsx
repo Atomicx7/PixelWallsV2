@@ -1,11 +1,9 @@
 import React, { useState, createContext, useContext, useEffect, useMemo } from 'react';
-import { LoginPage } from './components/LoginPage';
-import { SignupPage } from './components/SignupPage';
 import { Gallery } from './components/Gallery';
-import { ProfilePage } from './components/ProfilePage';
-import { Wallpaper, Category, StorageConfig, User } from './types';
+import { AdminPanel } from './components/admin/AdminPanel';
+import { Wallpaper, Category, StorageConfig } from './types';
 import { WALLPAPERS } from './constants';
-import { apiBase, apiUrl, fetchApi } from './api';
+import { apiUrl, fetchApi } from './api';
 
 // --- Theme Management ---
 type Theme = 'light' | 'dark';
@@ -49,30 +47,11 @@ const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const toggleTheme = () => {
     setTheme(prevTheme => (prevTheme === 'light' ? 'dark' : 'light'));
   };
-  
+
   const value = useMemo(() => ({ theme, toggleTheme }), [theme]);
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 };
-
-const TOKEN_KEY = 'pixelwalls_token';
-const USER_KEY = 'pixelwalls_user';
-
-// Deprecated: use apiBase() / apiUrl() / fetchApi() from './api' (trailing-slash safe + retry).
-const API_BASE_URL = apiBase();
-
-export function getAuthToken(): string | null {
-  try {
-    return localStorage.getItem(TOKEN_KEY);
-  } catch {
-    return null;
-  }
-}
-
-function authHeaders(extra?: Record<string, string>): Record<string, string> {
-  const token = getAuthToken();
-  return token ? { ...(extra || {}), Authorization: `Bearer ${token}` } : { ...(extra || {}) };
-}
 
 interface UploadData {
   file?: File;
@@ -82,29 +61,27 @@ interface UploadData {
   category: Category;
 }
 
-const MainApp: React.FC<{ user: User; onLogout: () => void }> = ({ user, onLogout }) => {
-  const [view, setView] = useState<'gallery' | 'profile'>('gallery');
+// No login — the gallery is open to everyone.
+const MainApp: React.FC = () => {
   const [wallpapers, setWallpapers] = useState<Wallpaper[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [storage, setStorage] = useState<StorageConfig | null>(null);
-  
+
   useEffect(() => {
     fetchApi('/api/config', undefined, 0)
       .then(r => (r.ok ? r.json() : null))
       .then(cfg => cfg && setStorage(cfg))
       .catch(() => {});
   }, []);
-  
+
   useEffect(() => {
     const fetchWallpapers = async () => {
       setLoading(true);
       setError(null);
       try {
         // 1 retry rides out Vercel cold starts / transient 504s.
-        const response = await fetchApi('/api/wallpapers', {
-          headers: authHeaders(),
-        });
+        const response = await fetchApi('/api/wallpapers');
         if (!response.ok) {
           throw new Error(`Backend responded with status ${response.status}.`);
         }
@@ -123,28 +100,27 @@ const MainApp: React.FC<{ user: User; onLogout: () => void }> = ({ user, onLogou
     };
     fetchWallpapers();
   }, []);
-  
+
   const handleImageUpload = async (data: UploadData) => {
     const isUrlImport = !data.file && !!data.imageUrl;
     let body: FormData | string;
     let headers: Record<string, string> | undefined;
 
     if (isUrlImport) {
-      headers = authHeaders({ 'Content-Type': 'application/json' });
+      headers = { 'Content-Type': 'application/json' };
       body = JSON.stringify({
         imageUrl: data.imageUrl,
         alt: data.title,
-        author: data.author || user.name,
+        author: data.author.trim() || 'Guest',
         category: data.category,
       });
     } else if (data.file) {
       const formData = new FormData();
       formData.append('image', data.file);
       formData.append('alt', data.title);
-      formData.append('author', data.author || user.name);
+      formData.append('author', data.author.trim() || 'Guest');
       formData.append('category', data.category);
       body = formData;
-      headers = authHeaders();
     } else {
       throw new Error('Select a file or paste an image URL.');
     }
@@ -155,7 +131,7 @@ const MainApp: React.FC<{ user: User; onLogout: () => void }> = ({ user, onLogou
         headers,
         body: body as any,
       });
-      
+
       if (!response.ok) {
         let errorMessage = `Server responded with status: ${response.status}`;
         try {
@@ -167,7 +143,7 @@ const MainApp: React.FC<{ user: User; onLogout: () => void }> = ({ user, onLogou
         }
         throw new Error(errorMessage);
       }
-      
+
       const newWallpaper = await response.json();
       setWallpapers(prev => [newWallpaper, ...prev]);
     } catch (error) {
@@ -176,21 +152,16 @@ const MainApp: React.FC<{ user: User; onLogout: () => void }> = ({ user, onLogou
     }
   };
 
-  const navigateToProfile = () => setView('profile');
-  const navigateToGallery = () => setView('gallery');
-
-  if (view === 'profile') {
-    return <ProfilePage user={user} allWallpapers={wallpapers} onBackToGallery={navigateToGallery} onHomeClick={navigateToGallery} onLogout={onLogout} />;
-  }
+  const navigateToGallery = () => {
+    document.getElementById('gallery-content')?.scrollIntoView({ behavior: 'smooth' });
+  };
 
   return (
-    <Gallery 
+    <Gallery
       wallpapers={wallpapers}
       loading={loading}
       error={error}
       storage={storage}
-      onLogout={onLogout} 
-      onProfileClick={navigateToProfile}
       onUpload={handleImageUpload}
       onHomeClick={navigateToGallery}
     />
@@ -199,67 +170,15 @@ const MainApp: React.FC<{ user: User; onLogout: () => void }> = ({ user, onLogou
 
 
 function App() {
-  const [user, setUser] = useState<User | null>(() => {
-    try {
-      const raw = localStorage.getItem(USER_KEY);
-      return raw ? (JSON.parse(raw) as User) : null;
-    } catch {
-      return null;
-    }
-  });
-  const [checking, setChecking] = useState<boolean>(!!getAuthToken());
-  const [authView, setAuthView] = useState<'signin' | 'signup'>('signin');
-
-  // Validate persisted token against Neon-backed /me on boot
-  useEffect(() => {
-    const token = getAuthToken();
-    if (!token) {
-      setChecking(false);
-      return;
-    }
-    fetch(apiUrl('/api/auth/me'), {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then(async (r) => {
-        if (!r.ok) throw new Error('invalid token');
-        const data = await r.json();
-        if (data?.user) {
-          setUser(data.user);
-          localStorage.setItem(USER_KEY, JSON.stringify(data.user));
-        }
-      })
-      .catch(() => {
-        localStorage.removeItem(TOKEN_KEY);
-        localStorage.removeItem(USER_KEY);
-        setUser(null);
-      })
-      .finally(() => setChecking(false));
-  }, []);
-
-  const handleLogin = (loggedInUser: User, token: string) => {
-    localStorage.setItem(TOKEN_KEY, token);
-    localStorage.setItem(USER_KEY, JSON.stringify(loggedInUser));
-    setUser(loggedInUser);
-  };
-  const handleLogout = () => {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
-    setUser(null);
-    setAuthView('signin');
-  };
-
+  // Admin panel lives at /admin (same glass design, guarded by ADMIN_SECRET).
+  const isAdminRoute =
+    typeof window !== 'undefined' &&
+    (window.location.pathname.replace(/\/+$/, '') === '/admin' ||
+      new URLSearchParams(window.location.search).has('admin'));
   return (
     <ThemeProvider>
       <div className="min-h-screen bg-gray-50 dark:bg-black text-slate-800 dark:text-slate-200 font-sans transition-colors duration-300">
-        {checking ? (
-          <div className="min-h-screen flex items-center justify-center text-sm text-slate-500">Restoring session…</div>
-        ) : user ? (
-          <MainApp user={user} onLogout={handleLogout} />
-        ) : authView === 'signup' ? (
-          <SignupPage onLogin={handleLogin} onSwitchToSignin={() => setAuthView('signin')} />
-        ) : (
-          <LoginPage onLogin={handleLogin} onSwitchToSignup={() => setAuthView('signup')} />
-        )}
+        {isAdminRoute ? <AdminPanel /> : <MainApp />}
       </div>
     </ThemeProvider>
   );

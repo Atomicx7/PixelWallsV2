@@ -1,6 +1,6 @@
 import { Wallpaper, Category } from './types';
 
-export const CATEGORIES: Category[] = ['All', 'Abstract', 'Pastel', 'Interiors', 'Minimalist'];
+export const CATEGORIES: Category[] = ['All', 'Abstract', 'Pastel', 'Interiors', 'Minimalist', 'Avatars'];
 
 export const WALLPAPERS: Wallpaper[] = [
   // Fix: Changed id from number to string to match the Wallpaper interface.

@@ -25,16 +25,23 @@ function isConfigured() {
   return configured;
 }
 
-function folder() {
+function baseFolder() {
   return process.env.CLOUDINARY_FOLDER || 'pixelwalls';
 }
 
-function uploadBuffer(buffer, { alt, author, category, mimetype, filename }) {
+function uploadBuffer(buffer, { alt, author, category, mimetype, filename, folder }) {
   init();
+  // Per-origin hierarchy: pixelwalls/apps/<client> | manual | guests | avatars.
+  // Sanitized to safe path segments.
+  const target = String(folder || baseFolder())
+    .split('/')
+    .map((s) => s.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64))
+    .filter(Boolean)
+    .join('/') || baseFolder();
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
       {
-        folder: folder(),
+        folder: target,
         resource_type: 'image',
         // Keep original filename-ish public id readable
         public_id: undefined,
@@ -86,8 +93,10 @@ function toWallpaper(r) {
 
 async function list() {
   init();
-  // Cloudinary Search API (enabled on free clouds). Fallback handled by caller.
-  const expr = `folder:${folder()} AND resource_type:image`;
+  // Cloudinary Search API (enabled on free clouds). `base/*` covers per-origin
+  // subfolders (apps/<client>, manual, guests). Fallback handled by caller.
+  // `base OR base/*` covers legacy assets in the root folder plus per-origin subfolders.
+  const expr = `(folder:${baseFolder()} OR folder:${baseFolder()}/*) AND resource_type:image`;
   const res = await cloudinary.search
     .expression(expr)
     .with_field('context')
@@ -98,4 +107,4 @@ async function list() {
   return (res.resources || []).map(toWallpaper);
 }
 
-module.exports = { name: 'cloudinary', isConfigured, uploadBuffer, list, toWallpaper };
+module.exports = { name: 'cloudinary', isConfigured, uploadBuffer, list, toWallpaper, baseFolder };

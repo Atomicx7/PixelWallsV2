@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useTheme } from '../App';
+import { apiUrl } from '../api';
 import GlassSurface from './GlassSurface';
 
 const SunIcon: React.FC<{ className?: string }> = ({ className }) => (
@@ -31,19 +32,109 @@ const ThemeToggle: React.FC = () => {
     );
 };
 
-const UserAvatar: React.FC<{ onProfileClick: () => void }> = ({ onProfileClick }) => (
-    <button onClick={onProfileClick} className="w-10 h-10 bg-gray-200/50 dark:bg-slate-700/50 rounded-full flex items-center justify-center ring-1 ring-gray-300/50 dark:ring-slate-600/50 hover:ring-blue-500 dark:hover:ring-blue-500 transition-all duration-300 focus:outline-none" aria-label="View Profile">
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-500 dark:text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-        </svg>
-    </button>
-);
+interface HeaderProps {}
 
-interface HeaderProps {
-    onProfileClick: () => void;
+const AVATAR_KEY = 'pw_avatar';
+
+interface PredefinedAvatar {
+  id: string;
+  url: string;
 }
 
-export const Header: React.FC<HeaderProps> = ({ onProfileClick }) => {
+/** Avatar picker: the fixed predefined set (visible/selectable by everyone, incl. free users).
+ *  Guests persist locally; signed-in/app sessions also save server-side when a token exists. */
+const AvatarPicker: React.FC = () => {
+  const [open, setOpen] = useState(false);
+  const [avatars, setAvatars] = useState<PredefinedAvatar[]>([]);
+  const [selected, setSelected] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(AVATAR_KEY);
+    } catch {
+      return null;
+    }
+  });
+
+  useEffect(() => {
+    if (!open && avatars.length > 0) return;
+    fetch(apiUrl('/api/avatars'))
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list) => Array.isArray(list) && setAvatars(list))
+      .catch(() => {});
+  }, [open, avatars.length]);
+
+  const choose = async (a: PredefinedAvatar) => {
+    setSelected(a.url);
+    try {
+      localStorage.setItem(AVATAR_KEY, a.url);
+    } catch {}
+    setOpen(false);
+    // Persist server-side when an identity token exists (manual login or app key).
+    try {
+      const manual = localStorage.getItem('pixelwalls_token');
+      if (manual) {
+        await fetch(apiUrl('/api/auth/me'), {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${manual}` },
+          body: JSON.stringify({ avatarId: a.id }),
+        });
+        return;
+      }
+      const appKey = localStorage.getItem('pw_app_key');
+      if (appKey) {
+        await fetch(apiUrl('/api/access/avatar'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${appKey}` },
+          body: JSON.stringify({ avatarId: a.id }),
+        });
+      }
+    } catch {}
+  };
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-10 h-10 bg-gray-200/50 dark:bg-slate-700/50 rounded-full flex items-center justify-center overflow-hidden ring-1 ring-gray-300/50 dark:ring-slate-600/50 hover:ring-blue-500 dark:hover:ring-blue-500 transition-all duration-300 focus:outline-none"
+        aria-label="Choose avatar"
+      >
+        {selected ? (
+          <img src={selected} alt="Your avatar" className="w-full h-full object-cover" />
+        ) : (
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-500 dark:text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+          </svg>
+        )}
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 mt-2 z-50 w-56 p-3 rounded-2xl bg-white dark:bg-slate-900 shadow-xl border border-gray-200/60 dark:border-slate-700/60">
+            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2 px-1">Choose your avatar</p>
+            <div className="grid grid-cols-3 gap-2">
+              {avatars.map((a) => (
+                <button
+                  key={a.id}
+                  onClick={() => choose(a)}
+                  className={`w-14 h-14 rounded-full overflow-hidden ring-2 transition hover:scale-105 focus:outline-none ${
+                    selected === a.url ? 'ring-blue-500' : 'ring-transparent hover:ring-blue-300'
+                  }`}
+                  aria-label="Select avatar"
+                >
+                  <img src={a.url} alt="Avatar option" className="w-full h-full object-cover" loading="lazy" />
+                </button>
+              ))}
+            </div>
+            {avatars.length === 0 && (
+              <p className="text-xs text-slate-400 px-1 py-2">Loading avatars…</p>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
+export const Header: React.FC<HeaderProps> = () => {
     const { theme } = useTheme();
     const [visible, setVisible] = useState(true);
     const [lastScrollY, setLastScrollY] = useState(0);
@@ -96,7 +187,7 @@ export const Header: React.FC<HeaderProps> = ({ onProfileClick }) => {
       </h1>
       <div className="flex items-center gap-3 md:gap-4">
         <ThemeToggle />
-        <UserAvatar onProfileClick={onProfileClick} />
+        <AvatarPicker />
       </div>
     </div>
   </div>

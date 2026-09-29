@@ -24,6 +24,9 @@ function publicUser(row) {
     id: row.id,
     name: row.name,
     email: row.email,
+    authSource: row.auth_source || 'manual',
+    isPremium: !!row.is_premium,
+    avatarUrl: row.avatar_url || null,
     createdAt: row.created_at,
   };
 }
@@ -88,12 +91,12 @@ router.post('/signup', async (req, res) => {
     const sql = db.getSql();
     const normalizedEmail = String(email).trim().toLowerCase();
 
-    const existing = await sql`SELECT id FROM users WHERE lower(email) = ${normalizedEmail} LIMIT 1`;
+    const existing = await sql`SELECT id FROM users WHERE auth_source = 'manual' AND lower(email) = ${normalizedEmail} LIMIT 1`;
     if (existing.length > 0) return res.status(409).json({ error: 'An account with this email already exists.' });
 
     const passwordHash = await bcrypt.hash(String(password), 10);
     const rows =
-      await sql`INSERT INTO users (name, email, password_hash) VALUES (${String(name).trim()}, ${String(email).trim()}, ${passwordHash}) RETURNING id, name, email, created_at`;
+      await sql`INSERT INTO users (name, email, password_hash, auth_source) VALUES (${String(name).trim()}, ${String(email).trim()}, ${passwordHash}, 'manual') RETURNING id, name, email, auth_source, is_premium, avatar_url, created_at`;
     const user = publicUser(rows[0]);
     const token = signToken(user);
     res.status(201).json({ user, token });
@@ -114,7 +117,7 @@ router.post('/login', async (req, res) => {
 
     const sql = db.getSql();
     const normalizedEmail = String(email).trim().toLowerCase();
-    const rows = await sql`SELECT id, name, email, password_hash, created_at FROM users WHERE lower(email) = ${normalizedEmail} LIMIT 1`;
+    const rows = await sql`SELECT id, name, email, password_hash, auth_source, is_premium, avatar_url, created_at FROM users WHERE auth_source = 'manual' AND lower(email) = ${normalizedEmail} LIMIT 1`;
     if (rows.length === 0) return res.status(401).json({ error: 'Invalid email or password.' });
 
     const row = rows[0];
@@ -136,12 +139,41 @@ router.get('/me', authMiddleware({ required: true }), async (req, res) => {
     if (!requireDb(req, res)) return;
     await db.initDb();
     const sql = db.getSql();
-    const rows = await sql`SELECT id, name, email, created_at FROM users WHERE id = ${req.user.sub} LIMIT 1`;
+    const rows = await sql`SELECT id, name, email, auth_source, is_premium, avatar_url, created_at FROM users WHERE id = ${req.user.sub} LIMIT 1`;
     if (rows.length === 0) return res.status(401).json({ error: 'User no longer exists.' });
     res.json({ user: publicUser(rows[0]) });
   } catch (err) {
     console.error('[auth] me error:', err);
     res.status(500).json({ error: 'Failed to fetch user.', details: err.message });
+  }
+});
+
+// PATCH /api/auth/me { name?, avatarId? } — manual users update own profile only.
+// avatarId must be one of the predefined admin-managed avatars.
+router.patch('/me', authMiddleware({ required: true }), async (req, res) => {
+  try {
+    if (!requireDb(req, res)) return;
+    await db.initDb();
+    const { name, avatarId } = req.body || {};
+    const sql = db.getSql();
+    let avatarUrl = null;
+    if (avatarId !== undefined) {
+      if (avatarId) {
+        const found = await sql`SELECT url FROM avatars WHERE id = ${avatarId} AND is_active = TRUE LIMIT 1`;
+        if (found.length === 0) return res.status(404).json({ error: 'Avatar not found.' });
+        avatarUrl = found[0].url;
+      }
+      await sql`UPDATE users SET avatar_url = ${avatarUrl} WHERE id = ${req.user.sub} AND auth_source = 'manual'`;
+    }
+    if (name !== undefined) {
+      if (!String(name).trim()) return res.status(400).json({ error: 'Name cannot be empty.' });
+      await sql`UPDATE users SET name = ${String(name).trim().slice(0, 120)} WHERE id = ${req.user.sub} AND auth_source = 'manual'`;
+    }
+    const rows = await sql`SELECT id, name, email, auth_source, is_premium, avatar_url, created_at FROM users WHERE id = ${req.user.sub} LIMIT 1`;
+    res.json({ user: publicUser(rows[0]) });
+  } catch (err) {
+    console.error('[auth] patch me error:', err);
+    res.status(500).json({ error: 'Failed to update profile.', details: err.message });
   }
 });
 
