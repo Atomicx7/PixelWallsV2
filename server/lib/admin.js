@@ -248,7 +248,8 @@ router.post('/avatars', async (req, res) => {
   }
 });
 
-router.patch('/avatars/:id', async (req, res) => {  try {
+router.patch('/avatars/:id', async (req, res) => {
+  try {
     if (!needDb(req, res)) return;
     await db.initDb();
     const { url, sortOrder, isActive } = req.body || {};
@@ -265,7 +266,6 @@ router.patch('/avatars/:id', async (req, res) => {  try {
     res.status(500).json({ error: 'Failed to update avatar.', details: e.message });
   }
 });
-
 router.delete('/avatars/:id', async (req, res) => {
   try {
     if (!needDb(req, res)) return;
@@ -297,6 +297,8 @@ router.post('/avatars/upload', upload.single('image'), async (req, res) => {
       filename: req.file.originalname,
       folder: `${process.env.CLOUDINARY_FOLDER || 'pixelwalls'}/avatars`,
     });
+    // NOTE: the ORIGINAL file URL (fullUrl) is stored, never a converted
+    // derivative — transparent PNGs/WebPs keep their alpha channel.
     const sql = db.getSql();
     const count = await sql`SELECT COUNT(*)::int AS n FROM avatars`;
     const rows = await sql`INSERT INTO avatars (url, sort_order)

@@ -19,7 +19,14 @@
 const express = require('express');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
+const multer = require('multer');
 const db = require('./db');
+const manage = require('./manage');
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: (Number(process.env.MAX_UPLOAD_MB) || 15) * 1024 * 1024 },
+});
 
 const MAX_TOKEN_AGE_S = 24 * 3600; // app tokens live at most 24h
 
@@ -225,8 +232,25 @@ accessRouter.post('/resolve', async (req, res) => {
   }
 });
 
-// POST /api/access/avatar { avatarId } (Bearer app token) — select a predefined avatar.
-// Only avatars from the fixed admin-managed set can be chosen.
+// POST /api/access/avatar/upload — app users (e.g. OffRecord) upload their OWN
+// profile image (multipart `image`, Bearer app token). Stored per-user under
+// pixelwalls/avatars/apps/…, re-upload replaces it, private to the owner.
+accessRouter.post('/avatar/upload', upload.single('image'), async (req, res) => {
+  try {
+    const header = req.headers.authorization || '';
+    const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+    if (!token) return res.status(401).json({ error: 'App token required.' });
+    if (!db.isConfigured()) return res.status(503).json({ error: 'DATABASE_URL not configured.' });
+    await db.initDb();
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded. Send multipart `image`.' });
+    const { client, claims } = await verifyAppToken(token);
+    const identity = await provisionAppUser(client, claims);
+    const { avatarUrl } = await manage.saveUserAvatar({ file: req.file, identity });
+    res.status(201).json({ avatarUrl });
+  } catch (e) {
+    res.status(e.status || 401).json({ error: e.message || 'Avatar upload failed.' });
+  }
+});
 accessRouter.post('/avatar', async (req, res) => {
   try {
     const header = req.headers.authorization || '';

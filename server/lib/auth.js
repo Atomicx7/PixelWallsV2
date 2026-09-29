@@ -1,11 +1,19 @@
 // lib/auth.js — JWT auth backed by Neon Postgres.
-// Routes: POST /api/auth/signup, POST /api/auth/login, GET /api/auth/me
+// Routes: POST /api/auth/signup, POST /api/auth/login, GET /api/auth/me,
+//         PATCH /api/auth/me, POST /api/auth/avatar/upload (own image, private)
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const multer = require('multer');
 const db = require('./db');
+const manage = require('./manage');
 
 const router = express.Router();
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: (Number(process.env.MAX_UPLOAD_MB) || 15) * 1024 * 1024 },
+});
 
 const JWT_SECRET = () => process.env.JWT_SECRET || process.env.AUTH_SECRET || '';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
@@ -148,8 +156,26 @@ router.get('/me', authMiddleware({ required: true }), async (req, res) => {
   }
 });
 
+// POST /api/auth/avatar/upload — manual users upload their OWN profile image
+// (multipart `image`). Stored per-user under pixelwalls/avatars/…, re-upload
+// replaces it, and it is private: only returned to the owner via /me.
+router.post('/avatar/upload', authMiddleware({ required: true }), upload.single('image'), async (req, res) => {
+  try {
+    if (!requireDb(req, res)) return;
+    await db.initDb();
+    const sql = db.getSql();
+    const rows = await sql`SELECT id, name FROM users WHERE id = ${req.user.sub} AND auth_source = 'manual' LIMIT 1`;
+    if (rows.length === 0) return res.status(401).json({ error: 'Account not found.' });
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded. Send multipart `image`.' });
+    const identity = { kind: 'manual', user: { id: rows[0].id, name: rows[0].name }, premium: false, canUpload: true };
+    const { avatarUrl } = await manage.saveUserAvatar({ file: req.file, identity });
+    res.status(201).json({ avatarUrl });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: 'Avatar upload failed.', details: err.message });
+  }
+});
+
 // PATCH /api/auth/me { name?, avatarId? } — manual users update own profile only.
-// avatarId must be one of the predefined admin-managed avatars.
 router.patch('/me', authMiddleware({ required: true }), async (req, res) => {
   try {
     if (!requireDb(req, res)) return;

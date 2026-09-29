@@ -520,7 +520,7 @@ function AvatarsTab() {
       <div className={card}>
         <SectionTitle>Add new avatar</SectionTitle>
         <form onSubmit={add} className="flex gap-3">
-          <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://… image URL" type="url" className={input} required />
+          <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://… image URL (PNG keeps transparency)" type="url" className={input} required />
           <button type="submit" className={btn}>Add</button>
         </form>
         <div className="flex items-center gap-3 mt-3">
