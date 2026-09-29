@@ -10,11 +10,20 @@
 //            PATCH /api/admin/categories/:name { visibility, showInPicker }
 // Avatars:   GET /api/admin/avatars (incl. inactive)
 //            POST /api/admin/avatars { url, sortOrder }
+//            POST /api/admin/avatars/upload (multipart `image` → Cloudinary pixelwalls/avatars)
 //            PATCH /api/admin/avatars/:id { url, sortOrder, isActive }
+//            DELETE /api/admin/avatars/:id
 const express = require('express');
+const multer = require('multer');
 const db = require('./db');
+const storage = require('./storage');
 
 const router = express.Router();
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: (Number(process.env.MAX_UPLOAD_MB) || 15) * 1024 * 1024 },
+});
 
 function requireAdmin(req, res, next) {
   const secret = process.env.ADMIN_SECRET || '';
@@ -267,6 +276,36 @@ router.delete('/avatars/:id', async (req, res) => {
     res.json({ deleted: rows[0].id });
   } catch (e) {
     res.status(500).json({ error: 'Failed to delete avatar.', details: e.message });
+  }
+});
+
+// POST /api/admin/avatars/upload — multipart `image` file → Cloudinary
+// `pixelwalls/avatars` folder → registered as a predefined avatar.
+router.post('/avatars/upload', upload.single('image'), async (req, res) => {
+  try {
+    if (!needDb(req, res)) return;
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded. Send multipart `image`.' });
+    if (!req.file.mimetype.startsWith('image/')) {
+      return res.status(400).json({ error: 'File must be an image.' });
+    }
+    await db.initDb();
+    const entry = await storage.upload(req.file.buffer, {
+      alt: req.file.originalname || 'Avatar',
+      author: 'admin',
+      category: 'Avatars',
+      mimetype: req.file.mimetype,
+      filename: req.file.originalname,
+      folder: `${process.env.CLOUDINARY_FOLDER || 'pixelwalls'}/avatars`,
+    });
+    const sql = db.getSql();
+    const count = await sql`SELECT COUNT(*)::int AS n FROM avatars`;
+    const rows = await sql`INSERT INTO avatars (url, sort_order)
+      VALUES (${entry.fullUrl || entry.url}, ${count[0].n})
+      RETURNING id, url, sort_order AS "sortOrder", is_active AS "isActive"`;
+    res.status(201).json(rows[0]);
+  } catch (e) {
+    console.error('[admin] avatar upload error:', e);
+    res.status(500).json({ error: 'Avatar upload failed.', details: e.message });
   }
 });
 

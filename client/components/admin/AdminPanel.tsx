@@ -3,7 +3,7 @@ import { DynamicBackground } from '../DynamicBackground';
 import GlassSurface from '../GlassSurface';
 import { useTheme } from '../../App';
 import {
-  adminFetch, getAdminSecret, setAdminSecret,
+  adminFetch, adminUpload, getAdminSecret, setAdminSecret,
   AppClient, AdminUpload, AdminCategory, AdminAvatar,
 } from './adminApi';
 
@@ -455,6 +455,7 @@ function AvatarsTab() {
   const [avatars, setAvatars] = useState<AdminAvatar[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [url, setUrl] = useState('');
+  const [uploading, setUploading] = useState(false);
 
   const load = useCallback(() => {
     adminFetch<AdminAvatar[]>('/api/admin/avatars').then(setAvatars).catch((e: any) => setError(e.message));
@@ -470,6 +471,25 @@ function AvatarsTab() {
       load();
     } catch (e: any) {
       setError(e.message);
+    }
+  };
+
+  const uploadFile = async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      setError('Please choose an image file.');
+      return;
+    }
+    setError(null);
+    setUploading(true);
+    try {
+      const form = new FormData();
+      form.append('image', file);
+      await adminUpload('/api/admin/avatars/upload', form);
+      load();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -503,6 +523,18 @@ function AvatarsTab() {
           <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://… image URL" type="url" className={input} required />
           <button type="submit" className={btn}>Add</button>
         </form>
+        <div className="flex items-center gap-3 mt-3">
+          <label className={`${btnGhost} cursor-pointer`}>
+            {uploading ? 'Uploading…' : 'Upload file → Cloudinary'}
+            <input type="file" accept="image/*" className="hidden" disabled={uploading}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                e.target.value = '';
+                if (f) void uploadFile(f);
+              }} />
+          </label>
+          <span className="text-xs text-slate-400">Stored in the pixelwalls/avatars folder</span>
+        </div>
       </div>
       <div className={card}>
         <SectionTitle>Predefined avatars ({avatars.filter((a) => a.isActive ?? true).length} active)</SectionTitle>

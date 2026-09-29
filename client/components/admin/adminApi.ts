@@ -30,6 +30,20 @@ export async function adminFetch<T = any>(path: string, init?: RequestInit): Pro
   return data as T;
 }
 
+/** Multipart upload with x-admin-secret (lets the browser set the boundary). */
+export async function adminUpload<T = any>(path: string, form: FormData): Promise<T> {
+  const secret = getAdminSecret();
+  const res = await fetch(apiUrl(path), {
+    method: 'POST',
+    headers: { 'x-admin-secret': secret || '' },
+    body: form,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (res.status === 403) throw new Error('Wrong admin secret.');
+  if (!res.ok) throw new Error(data.details || data.error || `Request failed (${res.status})`);
+  return data as T;
+}
+
 export interface AppClient {
   client_id: string;
   name: string;
