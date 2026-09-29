@@ -17,17 +17,17 @@ function isAdminRequest(req) {
 // ---------------------------------------------------------------------------
 // Upload registry
 // ---------------------------------------------------------------------------
-async function recordUpload({ provider, providerId, url, title, category, identity }) {
+async function recordUpload({ provider, providerId, url, title, category, identity, visibility }) {
   const sql = db.getSql();
   if (!sql) return null;
-  const visibility = identity && identity.kind === 'app' ? 'private' : 'public';
+  const vis = visibility || (identity && identity.kind === 'app' ? 'private' : 'public');
   const rows = await sql`INSERT INTO uploads
     (provider, provider_id, url, title, category, author_user_id, author_source, visibility)
     VALUES (${provider || 'unknown'}, ${String(providerId || '')}, ${url || ''},
       ${String(title || '').slice(0, 255)}, ${String(category || 'Abstract').slice(0, 60)},
       ${identity && identity.user ? identity.user.id : null},
       ${identity ? identity.kind === 'app' ? identity.source : identity.kind : 'guest'},
-      ${visibility})
+      ${vis})
     RETURNING id, visibility, created_at`;
   return rows[0];
 }
@@ -73,6 +73,91 @@ function folderFor(identity) {
   if (identity.kind === 'app') return `${base}/apps/${identity.source}`;
   if (identity.kind === 'manual') return `${base}/manual`;
   return `${base}/guests`;
+}
+
+/**
+ * Per-user private avatar upload (any user, incl. app users like OffRecord).
+ * Stores under pixelwalls/avatars/<origin>/<owner>, sets users.avatar_url
+ * (re-upload replaces it), and records a PRIVATE registry row so nobody but
+ * the owner (and admin) can ever see it. Guests are rejected (no identity).
+ */
+async function saveUserAvatar({ file, identity }) {
+  if (!identity || identity.kind === 'guest' || !identity.user) {
+    const err = new Error('Sign in or open from your app to upload an avatar.');
+    err.status = 401;
+    throw err;
+  }
+  if (!file || !file.mimetype.startsWith('image/')) {
+    const err = new Error('File must be an image.');
+    err.status = 400;
+    throw err;
+  }
+  const storage = require('./storage');
+  const base = process.env.CLOUDINARY_FOLDER || 'pixelwalls';
+  const owner =
+    identity.kind === 'app'
+      ? `apps/${identity.source}/${String(identity.externalId).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64)}`
+      : `manual/${identity.user.id}`;
+  const entry = await storage.upload(file.buffer, {
+    alt: 'Profile avatar',
+    author: identity.user.name || 'User',
+    category: 'Avatars',
+    mimetype: file.mimetype,
+    filename: file.originalname || 'avatar',
+    folder: `${base}/avatars/${owner}`,
+  });
+  // Serve a pre-transformed 256px avatar URL when the bytes live on
+  // Cloudinary (tiny feed loads); otherwise the original file URL.
+  // Re-upload simply overwrites avatar_url.
+  let avatarUrl = entry.fullUrl || entry.url;
+  if (entry.provider === 'cloudinary' && entry.id) {
+    try {
+      const cloudinary = require('./providers/cloudinary');
+      avatarUrl = cloudinary.avatarUrl(entry.id) || avatarUrl;
+    } catch (e) {
+      console.warn('[avatar] transformed URL skipped:', e.message);
+    }
+  }
+  const sql = db.getSql();
+  // Remember the previous avatar so it can be deleted from Cloudinary below.
+  let previousUrl = null;
+  if (identity.kind === 'app') {
+    const cur = await sql`SELECT avatar_url FROM users WHERE auth_source = ${identity.source} AND external_id = ${String(identity.externalId)} LIMIT 1`;
+    previousUrl = cur.length ? cur[0].avatar_url : null;
+    await sql`UPDATE users SET avatar_url = ${avatarUrl}
+      WHERE auth_source = ${identity.source} AND external_id = ${String(identity.externalId)}`;
+  } else {
+    const cur = await sql`SELECT avatar_url FROM users WHERE id = ${identity.user.id} LIMIT 1`;
+    previousUrl = cur.length ? cur[0].avatar_url : null;
+    await sql`UPDATE users SET avatar_url = ${avatarUrl} WHERE id = ${identity.user.id}`;
+  }
+  // Delete the replaced image from Cloudinary (best-effort, never fails the
+  // upload). destroyUserAvatar only accepts user-owned avatar paths, so
+  // shared predefined avatars can never be deleted this way.
+  if (previousUrl && previousUrl !== avatarUrl) {
+    try {
+      const cloudinary = require('./providers/cloudinary');
+      void cloudinary.destroyUserAvatar(previousUrl).then((deleted) => {
+        if (deleted) console.log(`[avatar] replaced image deleted from Cloudinary`);
+      });
+    } catch (e) {
+      console.warn('[avatar] cleanup skipped:', e.message);
+    }
+  }
+  try {
+    await recordUpload({
+      provider: entry.provider,
+      providerId: entry.id,
+      url: avatarUrl,
+      title: 'Profile avatar',
+      category: 'Avatars',
+      identity,
+      visibility: 'private',
+    });
+  } catch (e) {
+    console.warn('[avatar] registry write failed (avatar itself saved):', e.message);
+  }
+  return { avatarUrl };
 }
 
 // ---------------------------------------------------------------------------
@@ -138,6 +223,7 @@ module.exports = {
   uploadsToday,
   checkQuota,
   folderFor,
+  saveUserAvatar,
   getCategories,
   getAvatars,
   applyPolicy,

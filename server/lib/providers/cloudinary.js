@@ -91,8 +91,39 @@ function toWallpaper(r) {
   };
 }
 
-async function list() {
+/** Extract a Cloudinary public_id from a delivery URL, or null. */
+function publicIdFromUrl(url) {
+  try {
+    const m = String(url).match(/\/image\/upload\/(?:v\d+\/)?(.+?)(?:\.[a-zA-Z0-9]+)?$/);
+    return m ? m[1] : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Delete one Cloudinary asset by URL. SAFETY: only user-owned avatar paths
+ * (…/avatars/apps/… or …/avatars/manual/…) are ever deleted — shared
+ * predefined avatars, gallery images, and non-Cloudinary URLs are refused.
+ * Returns true if an asset was deleted.
+ */
+async function destroyUserAvatar(url) {
+  if (!url || typeof url !== 'string') return false;
+  if (!url.includes('res.cloudinary.com')) return false;
+  if (!url.includes('/avatars/apps/') && !url.includes('/avatars/manual/')) return false;
+  const publicId = publicIdFromUrl(url);
+  if (!publicId) return false;
   init();
+  try {
+    const res = await cloudinary.uploader.destroy(publicId, { resource_type: 'image' });
+    return res && res.result === 'ok';
+  } catch (e) {
+    console.warn('[cloudinary] avatar destroy failed:', e.message);
+    return false;
+  }
+}
+
+async function list() {  init();
   // Cloudinary Search API (enabled on free clouds). `base/*` covers per-origin
   // subfolders (apps/<client>, manual, guests). Fallback handled by caller.
   // `base OR base/*` covers legacy assets in the root folder plus per-origin subfolders.
@@ -107,4 +138,26 @@ async function list() {
   return (res.resources || []).map(toWallpaper);
 }
 
-module.exports = { name: 'cloudinary', isConfigured, uploadBuffer, list, toWallpaper, baseFolder };
+/**
+ * Small pre-transformed delivery URL for profile avatars: 256px square crop,
+ * auto format/quality (WebP/AVIF where supported). Feed cards load this
+ * instead of the multi-MB original — same bytes swapped server-side, no app
+ * update needed to change the recipe.
+ */
+function avatarUrl(publicId) {
+  if (!publicId) return null;
+  init();
+  try {
+    return (
+      cloudinary.url(publicId, {
+        resource_type: 'image',
+        secure: true,
+        transformation: [{ width: 256, height: 256, crop: 'fill', gravity: 'auto', fetch_format: 'auto', quality: 'auto' }],
+      }) || null
+    );
+  } catch {
+    return null;
+  }
+}
+
+module.exports = { name: 'cloudinary', isConfigured, uploadBuffer, list, toWallpaper, baseFolder, destroyUserAvatar, avatarUrl };
