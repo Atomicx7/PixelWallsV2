@@ -98,15 +98,6 @@ export function Gallery({ wallpapers, loading, error, storage, onLogout, onProfi
       <main>
         <Hero />
         <div id="gallery-content" className="container mx-auto px-4 py-12 md:py-16 pb-28">
-          {storage?.primary && (
-            <div className="flex justify-center mb-6">
-              <span className="text-xs px-3 py-1 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-300 border border-blue-500/20">
-                Storage: {storage.primary}
-                {storage.providers.length > 1 ? ` (+${storage.providers.length - 1} fallback${storage.providers.length > 2 ? 's' : ''})` : ''}
-                {' '}· up to {storage.maxUploadMB}MB · file + URL import
-              </span>
-            </div>
-          )}
           <CategoryFilter
             categories={CATEGORIES}
             activeCategory={activeCategory}
